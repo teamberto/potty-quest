@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Potty Champ</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="game-container">
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div id="timer">1:00</div>
+    <div id="stars">&#9733; 0</div>
+  </div>
+  <div id="hearts">
+    <img class="heart" src="assets/heart_full.png">
+    <img class="heart" src="assets/heart_full.png">
+    <img class="heart" src="assets/heart_full.png">
+  </div>
+
+  <button id="btn-pause" aria-label="Pause">&#10074;&#10074;</button>
+
+  <div id="menu" class="hidden">
+    <h1 id="menu-title">POTTY CHAMP</h1>
+    <div id="menu-chars">
+      <img src="assets/big_down_0.png" alt="Big brother">
+      <img src="assets/little_down_0.png" alt="Little brother">
+      <img src="assets/potty.png" alt="Potty">
+    </div>
+    <button id="menu-start">&#9654; Start Play</button>
+    <div id="menu-highscore">&nbsp;</div>
+    <button id="menu-intro">&#9654; Replay Intro</button>
+    <div id="menu-instructions">
+      <h2>How to Play</h2>
+      <p>Swipe anywhere to run (arrow keys or WASD on a computer). When an alert pops up over your little brother, touch him so he follows you, then lead him to the potty before the time runs out!</p>
+      <div class="instr"><img src="assets/icon_pee.png"><span>Pee alert &mdash; he needs to go, fast!</span></div>
+      <div class="instr"><img src="assets/icon_poop.png"><span>Poop alert &mdash; code brown, even faster!</span></div>
+      <div class="instr"><img src="assets/potty.png"><span>The potty &mdash; get him here in time to score.</span></div>
+      <div class="instr"><img src="assets/icon_star.png"><span>Stars &mdash; every save counts toward your high score.</span></div>
+      <div class="instr"><img src="assets/heart_full.png"><span>Hearts &mdash; you lose one for every accident.</span></div>
+      <div class="instr"><img src="assets/mop.png"><span>Mop &mdash; grab it from the bathroom, then stand on a mess to clean it up and win a heart back.</span></div>
+      <div class="instr"><img src="assets/turbo_shoe.png"><span>Turbo &mdash; hold the shoe button (or Shift) to sprint; grab glowing shoes to refill the power bar.</span></div>
+      <div class="instr"><span>&#9208;</span><span>Pause &mdash; tap the pause button (or press P) any time.</span></div>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <h1 id="overlay-title">Potty Champ</h1>
+    <p id="overlay-message">The ultimate potty-training rescue mission.</p>
+    <button id="overlay-button">Tap to Begin</button>
+  </div>
+
+  <div id="controls">
+    <div class="dpad">
+      <button id="btn-up" class="ctrl-btn dpad-up" aria-label="Move up">&#8593;</button>
+      <button id="btn-left" class="ctrl-btn dpad-left" aria-label="Move left">&#8592;</button>
+      <button id="btn-right" class="ctrl-btn dpad-right" aria-label="Move right">&#8594;</button>
+      <button id="btn-down" class="ctrl-btn dpad-down" aria-label="Move down">&#8595;</button>
+    </div>
+  </div>
+
+  <div id="turbo-wrap">
+    <div id="turbo-bar"><div id="turbo-fill"></div></div>
+    <button id="btn-turbo" aria-label="Turbo boost">
+      <img src="assets/turbo_shoe.png" alt="">
+    </button>
+  </div>
+</div>
+
+<script src="levels.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
