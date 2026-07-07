@@ -1,0 +1,19 @@
+{
+  "name": "potty-champ",
+  "version": "1.0.0",
+  "description": "Potty Champ - the ultimate potty-training rescue mission",
+  "private": true,
+  "scripts": {
+    "build:www": "rm -rf www && mkdir -p www && cp index.html game.js levels.js style.css www/ && cp -r assets www/assets",
+    "ios:sync": "npm run build:www && npx cap sync ios",
+    "ios:open": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/assets": "^3.0.5"
+  }
+}

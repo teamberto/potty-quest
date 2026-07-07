@@ -1,0 +1,11 @@
+{
+  "appId": "com.teamberto.pottychamp",
+  "appName": "Potty Champ",
+  "webDir": "www",
+  "backgroundColor": "#12141c",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#12141c",
+    "preferredContentMode": "mobile"
+  }
+}
