@@ -6,7 +6,7 @@ brew install node@18
 brew link node@18 --force
 
 cd "$CI_PRIMARY_REPOSITORY_PATH"
-npm install
+npm install --omit=dev
 
 cd ios/App
 pod install
