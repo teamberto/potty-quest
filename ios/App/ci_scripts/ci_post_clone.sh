@@ -1,5 +1,8 @@
 #!/bin/sh
-set -e
+   set -e
 
-cd "$CI_PRIMARY_REPOSITORY_PATH/ios/App"
-pod install
+   cd "$CI_PRIMARY_REPOSITORY_PATH"
+   npm install
+
+   cd ios/App
+   pod install
