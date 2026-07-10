@@ -48,7 +48,7 @@ const CLIENT_POS = { x: 7, y: 4 };
 const LEVELS = [
   {
     label: "Level 1 – Downstairs",
-    duration: 60,
+    duration: 165,
     rooms: [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1],
     furniture: [...FURNITURE_BASE],
     pottySpots: [{ x: 10.5, y: 8 }],
@@ -61,7 +61,7 @@ const LEVELS = [
   },
   {
     label: "Level 2 – The Bedroom Opens Up",
-    duration: 60,
+    duration: 165,
     rooms: [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom],
     furniture: [...FURNITURE_BASE, ...FURNITURE_L2],
     pottySpots: [{ x: 10.5, y: 8 }],
@@ -74,7 +74,7 @@ const LEVELS = [
   },
   {
     label: "Level 3 – The Whole House!",
-    duration: 60,
+    duration: 165,
     rooms: [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom, ROOMS.mudroom],
     furniture: [...FURNITURE_BASE, ...FURNITURE_L2, ...FURNITURE_L3],
     pottySpots: [{ x: 10.5, y: 8 }],
@@ -87,7 +87,7 @@ const LEVELS = [
   },
   {
     label: "Level 4 – Busy House",
-    duration: 75,
+    duration: 165,
     rooms: [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom, ROOMS.mudroom],
     furniture: [...FURNITURE_BASE, ...FURNITURE_L2, ...FURNITURE_L3, ...FURNITURE_L4],
     pottySpots: [{ x: 10.5, y: 8 }],
@@ -100,7 +100,7 @@ const LEVELS = [
   },
   {
     label: "Level 5 – Cake Day Chaos",
-    duration: 90,
+    duration: 165,
     rooms: [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom, ROOMS.mudroom],
     furniture: [...FURNITURE_BASE, ...FURNITURE_L2, ...FURNITURE_L3, ...FURNITURE_L4],
     pottySpots: [{ x: 10.5, y: 8 }],
@@ -112,3 +112,28 @@ const LEVELS = [
     alertTimeLimit: 7.5,
   },
 ];
+
+// ---------- Backyard bonus round (runs after every level) ----------
+const TOY_TYPES = ['toy_baseball', 'toy_football', 'toy_soccerball', 'toy_poolring'];
+
+const BONUS_SCENE = {
+  label: "Backyard Cleanup",
+  floorTile: 'grass',
+  wallTile: 'fence',
+  rooms: [{ x: 1, y: 1, w: 19, h: 12 }],
+  furniture: [
+    { type: "pool", x: 2, y: 2, wTiles: 6, hTiles: 4, blocking: true },
+    { type: "hot_tub", x: 8, y: 3, wTiles: 2, hTiles: 2, blocking: true },
+    { type: "sandbox", x: 2, y: 8, wTiles: 3, hTiles: 2, blocking: true },
+    { type: "swingset", x: 13, y: 2, wTiles: 4, hTiles: 3, blocking: true },
+    { type: "toybox", x: 17, y: 9, wTiles: 1, hTiles: 1, blocking: true },
+  ],
+  chestSpot: { x: 17.5 * TILE, y: 9.5 * TILE },
+  playerStart: { x: 10, y: 11 },
+  presetToys: [
+    { x: 5 * TILE, y: 11 * TILE, type: 'toy_baseball' },
+    { x: 11 * TILE, y: 8 * TILE, type: 'toy_soccerball' },
+    { x: 15 * TILE, y: 9 * TILE, type: 'toy_football' },
+    { x: 6 * TILE, y: 7 * TILE, type: 'toy_poolring' },
+  ],
+};

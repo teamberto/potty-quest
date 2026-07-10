@@ -528,4 +528,145 @@ def bookshelf_tile():
     return img
 save(bookshelf_tile(), "bookshelf")
 
+# ---------- bonus trophy ----------
+def trophy_icon():
+    img = new_canvas(16, 16)
+    d = ImageDraw.Draw(img)
+    GOLD = (255, 210, 63, 255)
+    GOLD_DK = (201, 149, 10, 255)
+    d.polygon([(3, 2), (13, 2), (11, 8), (5, 8)], fill=GOLD, outline=GOLD_DK)
+    d.ellipse([0, 2, 4, 7], outline=GOLD_DK)
+    d.ellipse([12, 2, 16, 7], outline=GOLD_DK)
+    rect(d, 7, 8, 9, 10, GOLD_DK)
+    rect(d, 4, 10, 12, 11, GOLD_DK)
+    rect(d, 3, 11, 13, 13, GOLD)
+    rect(d, 3, 13, 13, 14, GOLD_DK)
+    return img
+save(trophy_icon(), "icon_trophy")
+
+# ---------- backyard toy pickups ----------
+def toy_baseball():
+    img = new_canvas(16, 16)
+    d = ImageDraw.Draw(img)
+    d.ellipse([1, 1, 14, 14], fill=(255, 255, 255, 255), outline=(190, 190, 190, 255))
+    RED = (216, 40, 40, 255)
+    d.line([(4, 4), (6, 7), (5, 10)], fill=RED)
+    d.line([(11, 4), (9, 7), (10, 10)], fill=RED)
+    return img
+save(toy_baseball(), "toy_baseball")
+
+def toy_football():
+    img = new_canvas(16, 16)
+    d = ImageDraw.Draw(img)
+    BROWN = (138, 90, 43, 255)
+    BROWN_DK = (107, 68, 32, 255)
+    d.ellipse([1, 4, 14, 11], fill=BROWN, outline=BROWN_DK)
+    d.line([(4, 7), (11, 7)], fill=(255, 255, 255, 255))
+    for x in (5, 7, 9):
+        d.line([(x, 6), (x, 8)], fill=(255, 255, 255, 255))
+    return img
+save(toy_football(), "toy_football")
+
+def toy_soccerball():
+    img = new_canvas(16, 16)
+    d = ImageDraw.Draw(img)
+    d.ellipse([1, 1, 14, 14], fill=(255, 255, 255, 255), outline=(60, 60, 60, 255))
+    d.polygon([(7, 4), (10, 6), (9, 9), (5, 9), (4, 6)], fill=(40, 40, 40, 255))
+    return img
+save(toy_soccerball(), "toy_soccerball")
+
+def toy_poolring():
+    img = new_canvas(16, 16)
+    d = ImageDraw.Draw(img)
+    ORANGE = (255, 148, 60, 255)
+    ORANGE_DK = (214, 108, 30, 255)
+    d.ellipse([1, 1, 14, 14], fill=ORANGE, outline=ORANGE_DK)
+    d.pieslice([1, 1, 14, 14], 0, 90, fill=(255, 255, 255, 255))
+    d.pieslice([1, 1, 14, 14], 180, 270, fill=(255, 255, 255, 255))
+    d.ellipse([5, 5, 10, 10], fill=(0, 0, 0, 0))
+    return img
+save(toy_poolring(), "toy_poolring")
+
+# ---------- backyard scene tiles ----------
+GRASS = (94, 176, 74, 255)
+GRASS_DK = (76, 150, 58, 255)
+FENCE_WOOD = (196, 158, 108, 255)
+FENCE_WOOD_DK = (156, 120, 76, 255)
+WATER = (94, 186, 224, 255)
+WATER_DK = (66, 150, 196, 255)
+SAND = (230, 202, 140, 255)
+SAND_DK = (204, 172, 106, 255)
+
+def grass_tile():
+    img = new_canvas()
+    d = ImageDraw.Draw(img)
+    rect(d, 0, 0, T - 1, T - 1, GRASS)
+    for (x, y) in [(3, 4), (9, 2), (15, 6), (5, 12), (18, 14), (11, 18), (2, 19), (20, 9)]:
+        d.line([(x, y), (x, y - 3)], fill=GRASS_DK)
+    return img
+save(grass_tile(), "grass")
+
+def fence_tile():
+    img = new_canvas()
+    d = ImageDraw.Draw(img)
+    rect(d, 0, 0, T - 1, T - 1, GRASS)
+    rect(d, 0, 10, T - 1, 13, FENCE_WOOD_DK)
+    for x in range(1, T, 6):
+        rect(d, x, 2, x + 3, T - 4, FENCE_WOOD)
+        rect(d, x, 2, x + 3, 3, FENCE_WOOD_DK)
+    return img
+save(fence_tile(), "fence")
+
+def pool_tile():
+    w, h = T * 6, T * 4
+    img = new_canvas(w, h)
+    d = ImageDraw.Draw(img)
+    rect(d, 0, 0, w - 1, h - 1, WATER_DK)
+    rect(d, 4, 4, w - 5, h - 5, WATER)
+    for y in range(10, h - 6, 14):
+        d.line([(6, y), (w - 6, y)], fill=(140, 214, 240, 200))
+    return img
+save(pool_tile(), "pool")
+
+def hot_tub_tile():
+    w, h = T * 2, T * 2
+    img = new_canvas(w, h)
+    d = ImageDraw.Draw(img)
+    rect(d, 0, 0, w - 1, h - 1, (150, 106, 62, 255))
+    rect(d, 4, 4, w - 5, h - 5, WATER_DK)
+    rect(d, 7, 7, w - 8, h - 8, WATER)
+    for y in range(12, h - 8, 8):
+        d.line([(9, y), (w - 9, y)], fill=(140, 214, 240, 200))
+    return img
+save(hot_tub_tile(), "hot_tub")
+
+def sandbox_tile():
+    w, h = T * 3, T * 2
+    img = new_canvas(w, h)
+    d = ImageDraw.Draw(img)
+    rect(d, 0, 0, w - 1, h - 1, FENCE_WOOD_DK)
+    rect(d, 4, 4, w - 5, h - 5, SAND)
+    for (x, y) in [(10, 10), (30, 18), (50, 12), (18, 28), (40, 30), (60, 20)]:
+        d.ellipse([x, y, x + 4, y + 3], fill=SAND_DK)
+    return img
+save(sandbox_tile(), "sandbox")
+
+def swingset_tile():
+    w, h = T * 4, T * 3
+    img = new_canvas(w, h)
+    d = ImageDraw.Draw(img)
+    POLE = (150, 110, 60, 255)
+    POLE_DK = (110, 78, 40, 255)
+    d.line([(6, 4), (2, h - 2)], fill=POLE, width=5)
+    d.line([(26, 4), (30, h - 2)], fill=POLE, width=5)
+    d.line([(w - 10, 4), (w - 6, h - 2)], fill=POLE, width=5)
+    d.line([(w - 30, 4), (w - 34, h - 2)], fill=POLE, width=5)
+    d.line([(6, 4), (w - 10, 4)], fill=POLE_DK, width=5)
+    for sx in (46, 66):
+        d.line([(sx, 6), (sx, 30)], fill=(90, 90, 90, 255), width=2)
+        d.line([(sx + 6, 6), (sx + 6, 30)], fill=(90, 90, 90, 255), width=2)
+        rect(d, sx, 30, sx + 6, 34, (216, 40, 90, 255))
+    return img
+save(swingset_tile(), "swingset")
+
 print("done")

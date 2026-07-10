@@ -40,6 +40,7 @@ canvas#game {
   right: 0;
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 0 24px;
   font-family: -apple-system, "Helvetica Neue", sans-serif;
   font-weight: 800;
@@ -47,6 +48,11 @@ canvas#game {
   color: #fff;
   text-shadow: 0 2px 6px rgba(0,0,0,0.6);
   pointer-events: none;
+}
+
+#score {
+  font-size: 16px;
+  color: #ffe27a;
 }
 
 #hearts {

@@ -5,6 +5,7 @@
 
   const timerEl = document.getElementById('timer');
   const starsEl = document.getElementById('stars');
+  const scoreEl = document.getElementById('score');
   const heartsEl = document.getElementById('hearts');
   const heartImgs = heartsEl.querySelectorAll('img.heart');
   const turboFillEl = document.getElementById('turbo-fill');
@@ -29,6 +30,9 @@
     'stain_pee', 'stain_poop', 'cake_whole',
     'turbo_shoe', 'plant', 'bookshelf',
     'client', 'nail_table', 'mop',
+    'icon_trophy',
+    'toy_baseball', 'toy_football', 'toy_soccerball', 'toy_poolring',
+    'grass', 'fence', 'pool', 'hot_tub', 'sandbox', 'swingset',
   ];
   const images = {};
   let assetsLoaded = 0;
@@ -166,17 +170,27 @@
   const AudioFX = (() => {
     let actx = null;
     const live = [];
+    const MUSIC_VOL = 0.05;
+    const MUSIC_DUCK_VOL = 0.015;
+    let musicGain = null;
+    let musicPlaying = false;
+    let musicTimer = null;
     function ensure() {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return null;
-      if (!actx) actx = new AC();
+      if (!actx) {
+        actx = new AC();
+        musicGain = actx.createGain();
+        musicGain.gain.value = 0;
+        musicGain.connect(actx.destination);
+      }
       if (actx.state === 'suspended') actx.resume();
       return actx;
     }
     function tone(freq, dur, opts = {}) {
       const c = ensure();
       if (!c) return;
-      const { type = 'square', vol = 0.12, delay = 0, slide = 0 } = opts;
+      const { type = 'square', vol = 0.12, delay = 0, slide = 0, dest } = opts;
       const t0 = c.currentTime + delay;
       const osc = c.createOscillator();
       const gain = c.createGain();
@@ -185,11 +199,24 @@
       if (slide) osc.frequency.linearRampToValueAtTime(Math.max(30, freq + slide), t0 + dur);
       gain.gain.setValueAtTime(vol, t0);
       gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-      osc.connect(gain).connect(c.destination);
+      osc.connect(gain).connect(dest || c.destination);
       osc.start(t0);
       osc.stop(t0 + dur + 0.02);
       live.push(osc);
       if (live.length > 80) live.splice(0, 40);
+    }
+    // Soft looping backyard/house ambience, kept in a low register so it never
+    // competes with the potty alert's 660/880Hz square-wave beep.
+    const MUSIC_LOOP_SEC = 9.6;
+    function scheduleMusicLoop() {
+      const c = ensure();
+      if (!c || !musicPlaying) return;
+      const bass = [130.81, 130.81, 164.81, 196.00, 130.81, 130.81, 174.61, 196.00];
+      const arp = [392.00, 523.25, 392.00, 493.88, 392.00, 523.25, 349.23, 440.00];
+      const step = 1.2;
+      bass.forEach((f, i) => tone(f, 1.1, { type: 'triangle', vol: 0.05, delay: i * step, dest: musicGain }));
+      arp.forEach((f, i) => tone(f, 0.5, { type: 'triangle', vol: 0.03, delay: i * step + 0.15, dest: musicGain }));
+      musicTimer = setTimeout(scheduleMusicLoop, MUSIC_LOOP_SEC * 1000);
     }
     function noise(dur, opts = {}) {
       const c = ensure();
@@ -212,6 +239,9 @@
       stopAll() {
         for (const o of live) { try { o.stop(); } catch (e) {} }
         live.length = 0;
+        musicPlaying = false;
+        if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
+        if (actx && musicGain) musicGain.gain.setValueAtTime(0, actx.currentTime);
       },
       introMusic() {
         const melody = [523, 659, 784, 659, 523, 659, 880, 784, 659, 784, 1047, 880, 784, 880, 1047, 1319];
@@ -222,7 +252,30 @@
         }
         tone(1568, 0.6, { type: 'square', vol: 0.1, delay: 7.2 });
       },
-      alert() { tone(660, 0.09); tone(880, 0.12, { delay: 0.09 }); },
+      startMusic() {
+        const c = ensure();
+        if (!c || musicPlaying) return;
+        musicPlaying = true;
+        musicGain.gain.cancelScheduledValues(c.currentTime);
+        musicGain.gain.setValueAtTime(MUSIC_VOL, c.currentTime);
+        scheduleMusicLoop();
+      },
+      stopMusic() {
+        musicPlaying = false;
+        if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
+        if (actx && musicGain) musicGain.gain.setValueAtTime(0, actx.currentTime);
+      },
+      alert() {
+        const c = ensure();
+        if (c && musicGain) {
+          const t0 = c.currentTime;
+          musicGain.gain.cancelScheduledValues(t0);
+          musicGain.gain.setValueAtTime(musicGain.gain.value, t0);
+          musicGain.gain.linearRampToValueAtTime(MUSIC_DUCK_VOL, t0 + 0.05);
+          musicGain.gain.linearRampToValueAtTime(musicPlaying ? MUSIC_VOL : 0, t0 + 0.6);
+        }
+        tone(660, 0.09); tone(880, 0.12, { delay: 0.09 });
+      },
       catch() { tone(520, 0.07, { type: 'triangle', vol: 0.15 }); tone(700, 0.09, { type: 'triangle', vol: 0.15, delay: 0.06 }); },
       success() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.12, { type: 'triangle', vol: 0.14, delay: i * 0.09 })); },
       accident() { tone(220, 0.3, { type: 'sawtooth', vol: 0.12, slide: -130 }); noise(0.22, { vol: 0.05 }); },
@@ -274,6 +327,31 @@
       ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
     }
     ctx.globalAlpha = 1;
+  }
+
+  // ---------- Floating score popups ----------
+  const floatingTexts = [];
+  function spawnFloatText(x, y, text, color = '#ffe27a') {
+    floatingTexts.push({ x, y, text, color, life: 1.1 });
+  }
+  function updateFloatingTexts(dt) {
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+      const f = floatingTexts[i];
+      f.life -= dt;
+      f.y -= 26 * dt;
+      if (f.life <= 0) floatingTexts.splice(i, 1);
+    }
+  }
+  function drawFloatingTexts() {
+    ctx.textAlign = 'center';
+    ctx.font = '800 13px -apple-system, "Helvetica Neue", sans-serif';
+    for (const f of floatingTexts) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, f.life / 0.4));
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, Math.round(f.x), Math.round(f.y));
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
   }
 
   // ---------- Collision helpers ----------
@@ -331,7 +409,16 @@
   const PLAYER_SPEED = 128;
   const CATCH_RADIUS = 20;
   const POTTY_RADIUS = 22;
-  const FOLLOW_DELAY_FRAMES = 16;
+  const FOLLOW_OFFSET = 14; // how far behind the big brother the toddler tucks in
+  const SPEED_ESCALATION_STEP = 3;   // every N successful saves this level...
+  const SPEED_ESCALATION_MULT = 0.08; // ...the toddler gets this much faster (cumulative)
+  const POOP_SPEED_MULT = 1.18;       // poop alerts flee faster than pee alerts (worth more points)
+
+  const PEE_POINTS = 100;
+  const POOP_POINTS = 160;
+  const TIME_BONUS_PER_SEC = 12;   // x seconds left on the alert clock at delivery
+  const TROPHY_POINTS = 300;
+  const TOY_POINTS = 60;           // bonus round, per toy delivered
 
   let levelIndex = 0;
   let level = LEVELS[0];
@@ -340,9 +427,11 @@
   let starsTotal = 0;
   let accidentsThisLevel = 0;
   let accidentsTotal = 0;
+  let scoreThisLevel = 0;
+  let scoreTotal = 0;
   let hearts = 3;
   let stains = [];
-  let gameState = 'splash'; // splash | intro | menu | playing | paused | levelComplete | ending
+  let gameState = 'splash'; // splash | intro | menu | playing | paused | levelComplete | bonusRound | bonusComplete | ending
   let animClock = 0;
   let introTime = 0;
   let introSavedBurst = false;
@@ -351,8 +440,10 @@
   let poopSavedRun = 0;
 
   function loadBest() {
-    try { return JSON.parse(localStorage.getItem('pottychamp_best')) || { pee: 0, poop: 0, total: 0 }; }
-    catch (e) { return { pee: 0, poop: 0, total: 0 }; }
+    try {
+      const b = JSON.parse(localStorage.getItem('pottychamp_best')) || {};
+      return { pee: b.pee || 0, poop: b.poop || 0, total: b.total || 0, score: b.score || 0 };
+    } catch (e) { return { pee: 0, poop: 0, total: 0, score: 0 }; }
   }
   function saveBest(b) {
     try { localStorage.setItem('pottychamp_best', JSON.stringify(b)); } catch (e) {}
@@ -369,6 +460,18 @@
   let mopAvailable = true;
   let mopRespawnTimer = 0;
 
+  // ---------- Backyard bonus round ----------
+  const BONUS_DURATION = 60;
+  const TOY_PICKUP_RADIUS = 14;
+  const CHEST_RADIUS = 20;
+  const MAX_GROUND_TOYS = 5;
+  let bonusTimeRemaining = 0;
+  let bonusScore = 0;
+  let toysCollected = 0;
+  let carriedToy = null;
+  let bonusToys = [];
+  let bonusSpawnTimer = 0;
+
   const player = { x: 0, y: 0, w: SPRITE_SIZE, h: SPRITE_SIZE, facing: 'down', moving: false, animFrame: 0 };
   const toddler = {
     x: 0, y: 0, w: SPRITE_SIZE, h: SPRITE_SIZE, facing: 'down', moving: false, animFrame: 0,
@@ -376,7 +479,11 @@
     alertActive: false, alertType: null, alertTimeRemaining: 0, nextAlertIn: 0,
     relieveTimer: 0,
   };
-  let playerTrail = [];
+  let playerCurrentSpeed = 0;
+
+  const TROPHY_RADIUS = 18;
+  const trophy = { active: false, x: 0, y: 0, life: 0, spawnedThisLevel: false, spawnOnAlertIndex: 0 };
+  let alertCount = 0;
 
   function tileToPx(t) { return { x: t.x * TILE, y: t.y * TILE }; }
 
@@ -397,15 +504,32 @@
     return { x: rx * TILE, y: ry * TILE };
   }
 
+  // Like pickRandomRoomPoint, but retries a few times to avoid landing on
+  // top of blocking furniture (pool, sandbox, etc.) in scenes that are mostly one big room.
+  function pickRandomOpenPoint(scene) {
+    let p = pickRandomRoomPoint(scene.rooms);
+    for (let tries = 0; tries < 8; tries++) {
+      const box = { x: p.x - 4, y: p.y - 4, w: 8, h: 8 };
+      const blocked = scene.furniture.some((f) => f.blocking && aabbOverlap(box, furniturePixelRect(f)));
+      if (!blocked) break;
+      p = pickRandomRoomPoint(scene.rooms);
+    }
+    return p;
+  }
+
   function startLevel(idx) {
     levelIndex = idx;
     level = LEVELS[idx];
     timeRemaining = level.duration;
     starsThisLevel = 0;
     accidentsThisLevel = 0;
+    scoreThisLevel = 0;
+    trophy.active = false;
+    trophy.spawnedThisLevel = false;
+    trophy.spawnOnAlertIndex = 2 + Math.floor(Math.random() * 3); // spawns with the level's 2nd-4th alert
+    alertCount = 0;
     hearts = 3;
     stains = [];
-    playerTrail = [];
     particles.length = 0;
     turboMeter = TURBO_MAX;
     shoePickup.active = false;
@@ -428,6 +552,7 @@
     updateHud();
     gameState = 'playing';
     hideOverlay();
+    AudioFX.startMusic();
   }
 
   function showOverlay(title, message, buttonText, extraHtml) {
@@ -443,19 +568,30 @@
     const s = Math.floor(Math.max(0, timeRemaining) % 60);
     timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
     starsEl.textContent = `★ ${starsThisLevel}`;
+    scoreEl.textContent = `${scoreThisLevel} pts`;
     heartImgs.forEach((img, i) => {
       img.src = i < hearts ? 'assets/heart_full.png' : 'assets/heart_empty.png';
     });
     turboFillEl.style.width = `${(turboMeter / TURBO_MAX) * 100}%`;
   }
 
+  function updateBonusHud() {
+    const m = Math.floor(Math.max(0, bonusTimeRemaining) / 60);
+    const s = Math.floor(Math.max(0, bonusTimeRemaining) % 60);
+    timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+    starsEl.textContent = `\u{1F9F8} ${toysCollected}`;
+    scoreEl.textContent = `${bonusScore} pts`;
+    turboFillEl.style.width = `${(turboMeter / TURBO_MAX) * 100}%`;
+  }
+
   // ---------- Menu / intro / pause flow ----------
   function showMenu() {
     gameState = 'menu';
+    AudioFX.stopMusic();
     hideOverlay();
     const b = loadBest();
-    menuHighscoreEl.textContent = b.total > 0
-      ? `\u{1F3C6} Best run: ${b.total} saves (${b.pee} pees, ${b.poop} poops)`
+    menuHighscoreEl.textContent = b.score > 0
+      ? `\u{1F3C6} Best run: ${b.score} pts (${b.total} saves — ${b.pee} pees, ${b.poop} poops)`
       : 'No high score yet — be the first Potty Champ!';
     menuEl.classList.remove('hidden');
   }
@@ -479,23 +615,60 @@
     showMenu();
   }
 
+  let pausedFrom = 'playing';
   function togglePause() {
-    if (gameState === 'playing') {
+    if (gameState === 'playing' || gameState === 'bonusRound') {
+      pausedFrom = gameState;
       gameState = 'paused';
+      AudioFX.stopMusic();
       showOverlay('Paused', 'Take a breather — your brother can hold it. Probably.', 'Resume');
     } else if (gameState === 'paused') {
-      gameState = 'playing';
+      gameState = pausedFrom;
       hideOverlay();
+      AudioFX.startMusic();
     }
+  }
+
+  function startBonusRound() {
+    gameState = 'bonusRound';
+    bonusTimeRemaining = BONUS_DURATION;
+    bonusScore = 0;
+    toysCollected = 0;
+    carriedToy = null;
+    bonusToys = BONUS_SCENE.presetToys.map((t) => ({ ...t }));
+    bonusSpawnTimer = randRange(4, 7);
+    turboMeter = TURBO_MAX;
+    particles.length = 0;
+    const sp = BONUS_SCENE.playerStart;
+    player.x = sp.x * TILE; player.y = sp.y * TILE; player.facing = 'down'; player.moving = false;
+    heartsEl.style.display = 'none';
+    updateBonusHud();
+    hideOverlay();
+    AudioFX.startMusic();
+  }
+
+  function endBonusRound() {
+    gameState = 'bonusComplete';
+    heartsEl.style.display = '';
+    scoreTotal += bonusScore;
+    AudioFX.stopMusic();
+    AudioFX.fanfare();
+    const isLast = levelIndex + 1 >= LEVELS.length;
+    showOverlay(
+      'Yard Cleanup complete!',
+      `Toys collected: ${toysCollected} &nbsp;|&nbsp; +${bonusScore} pts`,
+      isLast ? 'See Results' : 'Next Level'
+    );
   }
 
   overlayButton.addEventListener('click', () => {
     if (gameState === 'splash') {
       startIntro();
     } else if (gameState === 'paused') {
-      gameState = 'playing';
-      hideOverlay();
+      togglePause();
     } else if (gameState === 'levelComplete') {
+      startBonusRound();
+    } else if (gameState === 'bonusComplete') {
       if (levelIndex + 1 < LEVELS.length) {
         startLevel(levelIndex + 1);
       } else {
@@ -511,6 +684,7 @@
     hideMenu();
     starsTotal = 0;
     accidentsTotal = 0;
+    scoreTotal = 0;
     peeSavedRun = 0;
     poopSavedRun = 0;
     startLevel(0);
@@ -524,9 +698,9 @@
   function showEnding() {
     const totalSaves = peeSavedRun + poopSavedRun;
     const best = loadBest();
-    let scoreHtml = `<br><br><strong>Saves this run: ${totalSaves}</strong> (${peeSavedRun} pees, ${poopSavedRun} poops)`;
-    if (totalSaves > best.total) {
-      saveBest({ pee: peeSavedRun, poop: poopSavedRun, total: totalSaves });
+    let scoreHtml = `<br><br><strong>${scoreTotal} pts</strong> &nbsp;|&nbsp; ${totalSaves} saves (${peeSavedRun} pees, ${poopSavedRun} poops)`;
+    if (scoreTotal > best.score) {
+      saveBest({ pee: peeSavedRun, poop: poopSavedRun, total: totalSaves, score: scoreTotal });
       scoreHtml += '<br>\u{1F3C6} NEW HIGH SCORE!';
     }
     const perfect = accidentsTotal === 0;
@@ -548,19 +722,20 @@
 
   function endLevel() {
     gameState = 'levelComplete';
+    AudioFX.stopMusic();
     AudioFX.fanfare();
     starsTotal += starsThisLevel;
     accidentsTotal += accidentsThisLevel;
-    const isLast = levelIndex + 1 >= LEVELS.length;
+    scoreTotal += scoreThisLevel;
     showOverlay(
       `${level.label} complete!`,
-      `Stars earned: ${starsThisLevel} &nbsp;|&nbsp; Accidents: ${accidentsThisLevel}`,
-      isLast ? 'See Results' : 'Next Level'
+      `Score: ${scoreThisLevel} pts &nbsp;|&nbsp; Stars: ${starsThisLevel} &nbsp;|&nbsp; Accidents: ${accidentsThisLevel}`,
+      'Clean Up the Yard!'
     );
   }
 
   // ---------- Update ----------
-  function updatePlayer(dt) {
+  function updatePlayer(dt, scene = level) {
     let dx = 0, dy = 0;
     if (input.left) dx -= 1;
     if (input.right) dx += 1;
@@ -570,12 +745,15 @@
     const turboActive = input.turbo && turboMeter > 0 && player.moving;
     if (player.moving) {
       const speed = PLAYER_SPEED * (turboActive ? TURBO_MULT : 1);
+      playerCurrentSpeed = speed;
       const len = Math.hypot(dx, dy) || 1;
       dx = (dx / len) * speed * dt;
       dy = (dy / len) * speed * dt;
       if (Math.abs(dx) > Math.abs(dy)) player.facing = dx > 0 ? 'right' : 'left';
       else if (dy !== 0) player.facing = dy > 0 ? 'down' : 'up';
-      moveWithCollision(player, dx, dy, level);
+      moveWithCollision(player, dx, dy, scene);
+    } else {
+      playerCurrentSpeed = 0;
     }
     if (turboActive) {
       turboMeter = Math.max(0, turboMeter - dt);
@@ -585,9 +763,6 @@
         spawnBurst(player.x + player.w / 2, player.y + player.h - 4, GOLD_SPARK, 2, 30);
       }
     }
-
-    playerTrail.push({ x: player.x, y: player.y });
-    if (playerTrail.length > 120) playerTrail.shift();
   }
 
   function updateShoePickup(dt) {
@@ -662,6 +837,43 @@
 
   function centerOf(e) { return { x: e.x + e.w / 2, y: e.y + e.h / 2 }; }
 
+  function speedEscalationMult() {
+    return 1 + Math.floor(starsThisLevel / SPEED_ESCALATION_STEP) * SPEED_ESCALATION_MULT;
+  }
+  function toddlerFleeSpeed() {
+    const base = level.fleeSpeed * speedEscalationMult();
+    return toddler.alertType === 'poop' ? base * POOP_SPEED_MULT : base;
+  }
+  function toddlerWanderSpeed() {
+    return level.wanderSpeed * speedEscalationMult();
+  }
+
+  function spawnTrophy() {
+    const p = pickRandomRoomPoint(level.rooms);
+    trophy.x = p.x;
+    trophy.y = p.y;
+    trophy.life = level.alertTimeLimit + 3; // tight against the potty countdown - a real gamble
+    trophy.active = true;
+  }
+
+  function updateTrophy(dt) {
+    if (!trophy.active) return;
+    trophy.life -= dt;
+    if (trophy.life <= 0) {
+      trophy.active = false;
+      return;
+    }
+    const pc = centerOf(player);
+    if (Math.hypot(pc.x - trophy.x, pc.y - trophy.y) < TROPHY_RADIUS) {
+      trophy.active = false;
+      scoreThisLevel += TROPHY_POINTS;
+      AudioFX.powerup();
+      spawnBurst(trophy.x, trophy.y, GOLD_SPARK, 16, 80);
+      spawnFloatText(trophy.x, trophy.y - 18, `+${TROPHY_POINTS} \u{1F3C6}`, '#ffd23f');
+      updateHud();
+    }
+  }
+
   function updateToddlerAI(dt) {
     const t = toddler;
 
@@ -673,6 +885,11 @@
         t.alertTimeRemaining = level.alertTimeLimit;
         t.state = 'fleeing';
         AudioFX.alert();
+        alertCount++;
+        if (!trophy.spawnedThisLevel && alertCount === trophy.spawnOnAlertIndex) {
+          trophy.spawnedThisLevel = true;
+          spawnTrophy();
+        }
       }
     }
 
@@ -704,20 +921,29 @@
         let vx = tc.x - pc.x, vy = tc.y - pc.y;
         const len = Math.hypot(vx, vy) || 1;
         vx /= len; vy /= len;
-        const dx = vx * level.fleeSpeed * dt, dy = vy * level.fleeSpeed * dt;
+        const fleeSpeed = toddlerFleeSpeed();
+        const dx = vx * fleeSpeed * dt, dy = vy * fleeSpeed * dt;
         t.moving = true;
         if (Math.abs(dx) > Math.abs(dy)) t.facing = dx > 0 ? 'right' : 'left';
         else t.facing = dy > 0 ? 'down' : 'up';
         moveWithCollision(t, dx, dy, level);
       }
     } else if (t.state === 'following') {
-      const idx = Math.max(0, playerTrail.length - FOLLOW_DELAY_FRAMES);
-      const target = playerTrail[idx] || centerOf(player);
-      const dx0 = target.x - t.x, dy0 = target.y - t.y;
+      const pc = centerOf(player);
+      let ox = 0, oy = 0;
+      if (player.facing === 'left') ox = FOLLOW_OFFSET;
+      else if (player.facing === 'right') ox = -FOLLOW_OFFSET;
+      else if (player.facing === 'up') oy = FOLLOW_OFFSET;
+      else if (player.facing === 'down') oy = -FOLLOW_OFFSET;
+      const targetX = pc.x + ox - t.w / 2;
+      const targetY = pc.y + oy - t.h / 2;
+      const dx0 = targetX - t.x, dy0 = targetY - t.y;
       const dist = Math.hypot(dx0, dy0);
-      t.moving = dist > 3;
+      t.moving = dist > 2;
       if (t.moving) {
-        const speed = level.fleeSpeed * 1.05;
+        // Match the big brother's current pace (turbo included), with a
+        // small catch-up boost so the toddler snaps in tight instead of trailing.
+        const speed = Math.max(playerCurrentSpeed, toddlerFleeSpeed()) * 1.2;
         const step = Math.min(dist, speed * dt);
         const dx = (dx0 / dist) * step, dy = (dy0 / dist) * step;
         if (Math.abs(dx0) > Math.abs(dy0)) t.facing = dx0 > 0 ? 'right' : 'left';
@@ -730,12 +956,17 @@
         const tc = centerOf(t);
         if (Math.hypot(tc.x - sx, tc.y - sy) < POTTY_RADIUS) {
           starsThisLevel++;
-          if (t.alertType === 'pee') peeSavedRun++; else poopSavedRun++;
+          const isPoop = t.alertType === 'poop';
+          if (isPoop) poopSavedRun++; else peeSavedRun++;
+          const timeBonus = Math.round(Math.max(0, t.alertTimeRemaining) * TIME_BONUS_PER_SEC);
+          const earned = (isPoop ? POOP_POINTS : PEE_POINTS) + timeBonus;
+          scoreThisLevel += earned;
           t.alertActive = false;
           t.state = 'relieved';
           t.relieveTimer = 1.0;
           AudioFX.success();
           spawnBurst(sx, sy, GOLD_SPARK, 14, 70);
+          spawnFloatText(sx, sy - 18, `+${earned}`, isPoop ? '#ffb37a' : '#ffe27a');
           t.nextAlertIn = randRange(level.alertMin, level.alertMax);
           updateHud();
           break;
@@ -759,7 +990,7 @@
         t.stuckTimer = 0;
         t.moving = false;
       } else {
-        const step = Math.min(dist, level.wanderSpeed * dt);
+        const step = Math.min(dist, toddlerWanderSpeed() * dt);
         const dx = (dx0 / dist) * step, dy = (dy0 / dist) * step;
         t.moving = true;
         if (Math.abs(dx0) > Math.abs(dy0)) t.facing = dx0 > 0 ? 'right' : 'left';
@@ -861,6 +1092,55 @@
     ctx.textBaseline = 'alphabetic';
   }
 
+  function updateBonusRound(dt) {
+    updatePlayer(dt, BONUS_SCENE);
+    const pc = centerOf(player);
+
+    if (!carriedToy) {
+      for (let i = bonusToys.length - 1; i >= 0; i--) {
+        const t = bonusToys[i];
+        if (Math.hypot(pc.x - t.x, pc.y - t.y) < TOY_PICKUP_RADIUS) {
+          carriedToy = t.type;
+          bonusToys.splice(i, 1);
+          AudioFX.catch();
+          spawnBurst(t.x, t.y, PUFF_WHITE, 8, 40);
+          break;
+        }
+      }
+    } else {
+      const cs = BONUS_SCENE.chestSpot;
+      if (Math.hypot(pc.x - cs.x, pc.y - cs.y) < CHEST_RADIUS) {
+        bonusScore += TOY_POINTS;
+        toysCollected++;
+        carriedToy = null;
+        AudioFX.success();
+        spawnBurst(cs.x, cs.y, GOLD_SPARK, 12, 60);
+        spawnFloatText(cs.x, cs.y - 18, `+${TOY_POINTS}`, '#ffe27a');
+      }
+    }
+
+    if (bonusTimeRemaining > 5 && bonusToys.length < MAX_GROUND_TOYS) {
+      bonusSpawnTimer -= dt;
+      if (bonusSpawnTimer <= 0) {
+        bonusSpawnTimer = randRange(4, 7);
+        const p = pickRandomOpenPoint(BONUS_SCENE);
+        const type = TOY_TYPES[Math.floor(Math.random() * TOY_TYPES.length)];
+        bonusToys.push({ x: p.x, y: p.y, type });
+      }
+    }
+
+    updateParticles(dt);
+    updateFloatingTexts(dt);
+
+    bonusTimeRemaining -= dt;
+    if (bonusTimeRemaining <= 0) {
+      bonusTimeRemaining = 0;
+      endBonusRound();
+      return;
+    }
+    updateBonusHud();
+  }
+
   function update(dt) {
     if (gameState === 'intro') {
       introTime += dt;
@@ -869,13 +1149,16 @@
       if (introTime >= INTRO_LENGTH) finishIntro();
       return;
     }
-    if (gameState !== 'playing') { updateParticles(dt); return; }
+    if (gameState === 'bonusRound') { updateBonusRound(dt); return; }
+    if (gameState !== 'playing') { updateParticles(dt); updateFloatingTexts(dt); return; }
     updatePlayer(dt);
     updateToddlerAI(dt);
+    updateTrophy(dt);
     updateShoePickup(dt);
     updateMop(dt);
     updateCleanup(dt);
     updateParticles(dt);
+    updateFloatingTexts(dt);
 
     timeRemaining -= dt;
     if (timeRemaining <= 0) {
@@ -886,25 +1169,27 @@
   }
 
   // ---------- Rendering ----------
-  function isWalkableTile(tx, ty) {
+  function isWalkableTile(tx, ty, scene = level) {
     const cx = tx + 0.5, cy = ty + 0.5;
-    for (const r of level.rooms) {
+    for (const r of scene.rooms) {
       if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) return true;
     }
     return false;
   }
 
-  function drawTilemap() {
+  function drawTilemap(scene = level) {
+    const floorImg = images[scene.floorTile || 'floor_wood'];
+    const wallImg = images[scene.wallTile || 'wall'];
     ctx.fillStyle = '#12141c';
     ctx.fillRect(0, 0, WORLD_W, WORLD_H);
     for (let ty = 0; ty < GRID_ROWS; ty++) {
       for (let tx = 0; tx < GRID_COLS; tx++) {
-        if (isWalkableTile(tx, ty)) {
-          ctx.drawImage(images.floor_wood, tx * TILE, ty * TILE);
+        if (isWalkableTile(tx, ty, scene)) {
+          ctx.drawImage(floorImg, tx * TILE, ty * TILE);
         } else {
-          const n = isWalkableTile(tx - 1, ty) || isWalkableTile(tx + 1, ty) ||
-                    isWalkableTile(tx, ty - 1) || isWalkableTile(tx, ty + 1);
-          if (n) ctx.drawImage(images.wall, tx * TILE, ty * TILE);
+          const n = isWalkableTile(tx - 1, ty, scene) || isWalkableTile(tx + 1, ty, scene) ||
+                    isWalkableTile(tx, ty - 1, scene) || isWalkableTile(tx, ty + 1, scene);
+          if (n) ctx.drawImage(wallImg, tx * TILE, ty * TILE);
         }
       }
     }
@@ -951,6 +1236,14 @@
     ctx.drawImage(images.turbo_shoe, shoePickup.x - 8, shoePickup.y - 8 + bob, 16, 16);
   }
 
+  function drawTrophy() {
+    if (!trophy.active) return;
+    const blink = trophy.life < 3 && Math.floor(performance.now() / 150) % 2 === 0;
+    if (blink) return;
+    const bob = Math.sin(performance.now() / 220) * 2;
+    ctx.drawImage(images.icon_trophy, trophy.x - 8, trophy.y - 8 + bob, 16, 16);
+  }
+
   function drawMopSpot() {
     if (!mopAvailable || !level.mopSpot) return;
     const bob = Math.sin(performance.now() / 300) * 1.5;
@@ -988,6 +1281,7 @@
     drawScrubBars();
     drawPottySpots();
     drawShoePickup();
+    drawTrophy();
     drawMopSpot();
 
     // depth-sorted furniture + characters
@@ -1019,7 +1313,40 @@
 
     drawCarriedMop();
     drawParticles();
+    drawFloatingTexts();
     drawAlertIcon();
+  }
+
+  function drawBonusRound() {
+    drawTilemap(BONUS_SCENE);
+
+    const drawables = [];
+    for (const f of BONUS_SCENE.furniture) {
+      const img = images[f.type];
+      if (!img) continue;
+      const px = f.x * TILE, py = f.y * TILE;
+      drawables.push({ img, x: px, y: py, sortY: py + f.hTiles * TILE });
+    }
+    drawables.push({ custom: 'player', sortY: player.y + player.h });
+
+    drawables.sort((a, b) => a.sortY - b.sortY);
+    for (const d of drawables) {
+      if (d.custom === 'player') drawCharacter(player, 'big');
+      else ctx.drawImage(d.img, d.x, d.y);
+    }
+
+    for (const t of bonusToys) {
+      const bob = Math.sin(performance.now() / 220 + t.x) * 2;
+      ctx.drawImage(images[t.type], t.x - 8, t.y - 8 + bob, 16, 16);
+    }
+
+    if (carriedToy) {
+      const bob = Math.sin(performance.now() / 250) * 1.5;
+      ctx.drawImage(images[carriedToy], player.x + player.w - 8, player.y - 12 + bob, 14, 14);
+    }
+
+    drawParticles();
+    drawFloatingTexts();
   }
 
   // ---------- Main loop ----------
@@ -1042,9 +1369,11 @@
       shY = (Math.random() * 2 - 1) * shakeMag;
     }
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, (offsetX + shX) * dpr, (offsetY + shY) * dpr);
-    if (gameState === 'intro') drawIntro(); else draw();
+    if (gameState === 'intro') drawIntro();
+    else if (gameState === 'bonusRound' || gameState === 'bonusComplete') drawBonusRound();
+    else draw();
 
-    pauseBtn.style.display = gameState === 'playing' ? 'flex' : 'none';
+    pauseBtn.style.display = (gameState === 'playing' || gameState === 'bonusRound') ? 'flex' : 'none';
 
     requestAnimationFrame(loop);
   }
