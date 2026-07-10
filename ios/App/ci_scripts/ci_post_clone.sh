@@ -1,5 +1,13 @@
 #!/bin/sh
 set -e
 
-cd "$CI_PRIMARY_REPOSITORY_PATH/ios/App"
+export HOMEBREW_NO_INSTALL_CLEANUP=TRUE
+brew install node@18
+brew link node@18 --force
+
+cd "$CI_PRIMARY_REPOSITORY_PATH"
+npm install --ignore-scripts
+npm run ios:sync
+
+cd ios/App
 pod install
