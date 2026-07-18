@@ -30,6 +30,7 @@
   const lsHintEl = document.getElementById('ls-hint');
   const lsBackBtn = document.getElementById('ls-back');
   const menuEndlessBtn = document.getElementById('menu-endless');
+  const menuDashBtn = document.getElementById('menu-dash');
   const menuStickersBtn = document.getElementById('menu-stickers');
   const stickerBookEl = document.getElementById('sticker-book');
   const sbGridEl = document.getElementById('sb-grid');
@@ -548,9 +549,10 @@
       p.stickers = p.stickers || {};
       p.counters = Object.assign({ trophies: 0, candies: 0 }, p.counters || {});
       p.endlessBest = p.endlessBest || 0;
+      p.dashBest = p.dashBest || 0;
       return p;
     } catch (e) {
-      return { stars: {}, unlocked: { home: true }, stickers: {}, counters: { trophies: 0, candies: 0 }, endlessBest: 0 };
+      return { stars: {}, unlocked: { home: true }, stickers: {}, counters: { trophies: 0, candies: 0 }, endlessBest: 0, dashBest: 0 };
     }
   }
   const progress = loadProgress();
@@ -588,6 +590,7 @@
     { id: 'world_store', name: 'Aisle Boss', icon: 'cart', hint: 'Clear every Grocery Store level.' },
     { id: 'world_school', name: 'Hall Monitor', icon: 'chalkboard', hint: 'Clear every School level.' },
     { id: 'endless_10', name: 'Marathon Champ', icon: 'cake_whole', hint: 'Reach Day 10 in Endless Mode.' },
+    { id: 'dash_500', name: 'Road Runner', icon: 'little_up_0', hint: 'Dash 500 m in Potty Dash.' },
   ];
   function stickerCount() { return STICKERS.filter((s) => progress.stickers[s.id]).length; }
 
@@ -819,6 +822,14 @@
         ? `\u{267E}\u{FE0F} Endless — Best: Day ${progress.endlessBest}`
         : '\u{267E}\u{FE0F} Endless Mode';
     }
+    // Potty Dash opens once the Park is fully cleared.
+    if (menuDashBtn) {
+      const parkDone = isWorldComplete(WORLDS[1]);
+      menuDashBtn.classList.toggle('hidden', !parkDone);
+      menuDashBtn.innerHTML = progress.dashBest > 0
+        ? `\u{1F3C3} Potty Dash — Best: ${progress.dashBest} m`
+        : '\u{1F3C3} Potty Dash';
+    }
     if (menuStickersBtn) {
       menuStickersBtn.innerHTML = `\u{1F4D6} Sticker Book (${stickerCount()}/${STICKERS.length})`;
     }
@@ -907,6 +918,253 @@
     );
   }
 
+  // ---------- Potty Dash (lane-runner mode, unlocked after the Park) ----------
+  // Champ REALLY has to go and he's sprinting down the street to the potty.
+  // Swipe (or arrow keys) to change lanes, grab candy and toys, dodge the mess.
+  // Characters are drawn extra-big here for that arcade feel.
+  const DASH_LANES = 3;
+  const DASH_LANE_W = 64;
+  const DASH_START_SPEED = 210;    // px/s scroll at the start
+  const DASH_MAX_SPEED = 520;
+  const DASH_ACCEL = 7;            // px/s gained per second
+  const DASH_MAX_HITS = 3;         // boo-boos before the run ends
+  const DASH_CHAR_SCALE = 2;       // 2x sprites — big chunky runners
+  const DASH_STICKER_M = 500;      // Road Runner sticker distance
+
+  let dashScroll = 0;
+  let dashSpeed = DASH_START_SPEED;
+  let dashScore = 0;
+  let dashHits = 0;
+  let dashLane = 1;
+  let dashChampLane = 1;
+  let dashChampLaneDelay = 0;
+  let dashObjs = [];
+  let dashSpawnGap = 0;
+  let dashInvincible = 0;
+  let dashPrevLeft = false, dashPrevRight = false;
+  let dashSwipeX = null;
+
+  function dashLaneX(lane) {
+    return WORLD_W / 2 + (lane - 1) * DASH_LANE_W;
+  }
+
+  function startDash() {
+    hideMenu();
+    gameState = 'dash';
+    dashScroll = 0;
+    dashSpeed = DASH_START_SPEED;
+    dashScore = 0;
+    dashHits = 0;
+    dashLane = 1;
+    dashChampLane = 1;
+    dashChampLaneDelay = 0;
+    dashObjs = [];
+    dashSpawnGap = 140;
+    dashInvincible = 0;
+    particles.length = 0;
+    heartsEl.style.display = '';
+    hearts = DASH_MAX_HITS;
+    updateDashHud();
+    hideOverlay();
+    AudioFX.startMusic();
+  }
+
+  function dashMeters() { return Math.floor(dashScroll / TILE); }
+
+  function updateDashHud() {
+    timerEl.textContent = `${dashMeters()} m`;
+    scoreEl.textContent = `${dashScore} pts`;
+    starsEl.textContent = progress.dashBest > 0 ? `Best ${progress.dashBest}m` : '';
+    heartImgs.forEach((img, i) => {
+      img.src = i < hearts ? 'assets/heart_full.png' : 'assets/heart_empty.png';
+    });
+  }
+
+  function dashChangeLane(dir) {
+    const next = Math.max(0, Math.min(DASH_LANES - 1, dashLane + dir));
+    if (next !== dashLane) {
+      dashLane = next;
+      dashChampLaneDelay = 0.16; // Champ follows your lane a beat later
+      AudioFX.catch();
+    }
+  }
+
+  function endDash() {
+    gameState = 'dashOver';
+    AudioFX.stopMusic();
+    AudioFX.accident();
+    const m = dashMeters();
+    if (m > progress.dashBest) { progress.dashBest = m; saveProgress(); }
+    if (m >= DASH_STICKER_M) awardSticker('dash_500');
+    showOverlay(
+      'Ouch! Too many boo-boos!',
+      `You dashed <strong>${m} m</strong> and scored ${dashScore} pts.` +
+      `<br><small>Best dash: ${progress.dashBest} m</small>`,
+      'Back to Menu'
+    );
+  }
+
+  function updateDash(dt) {
+    dashSpeed = Math.min(DASH_MAX_SPEED, dashSpeed + DASH_ACCEL * dt);
+    dashScroll += dashSpeed * dt;
+    dashScore += Math.round(dashSpeed * dt * 0.02); // trickle points for distance
+
+    // lane input: keyboard edges
+    if (input.left && !dashPrevLeft) dashChangeLane(-1);
+    if (input.right && !dashPrevRight) dashChangeLane(1);
+    dashPrevLeft = input.left; dashPrevRight = input.right;
+
+    // Champ mirrors your lane with a little lag
+    if (dashChampLaneDelay > 0) {
+      dashChampLaneDelay -= dt;
+      if (dashChampLaneDelay <= 0) dashChampLane = dashLane;
+    }
+
+    if (dashInvincible > 0) dashInvincible -= dt;
+
+    // spawn rows by distance traveled
+    dashSpawnGap -= dashSpeed * dt;
+    if (dashSpawnGap <= 0) {
+      dashSpawnGap = randRange(105, 150);
+      const lanes = [0, 1, 2];
+      const firstLane = lanes.splice(Math.floor(Math.random() * lanes.length), 1)[0];
+      if (Math.random() < 0.62) {
+        const r = Math.random();
+        dashObjs.push({ kind: 'obstacle', type: r < 0.4 ? 'stain_poop' : (r < 0.8 ? 'stain_pee' : 'cart'), lane: firstLane, y: -40 });
+        // sometimes a second obstacle — but never all three lanes
+        if (Math.random() < 0.22 + Math.min(0.2, dashScroll / 30000)) {
+          const secondLane = lanes.splice(Math.floor(Math.random() * lanes.length), 1)[0];
+          dashObjs.push({ kind: 'obstacle', type: Math.random() < 0.7 ? 'stain_pee' : 'stain_poop', lane: secondLane, y: -40 });
+        }
+      } else {
+        const isCandy = Math.random() < 0.55;
+        const toyType = TOY_TYPES[Math.floor(Math.random() * TOY_TYPES.length)];
+        dashObjs.push({ kind: 'pickup', type: isCandy ? 'candy' : toyType, lane: firstLane, y: -40 });
+      }
+    }
+
+    // move + collide
+    const playerY = WORLD_H - 64;
+    for (let i = dashObjs.length - 1; i >= 0; i--) {
+      const o = dashObjs[i];
+      o.y += dashSpeed * dt;
+      if (o.y > WORLD_H + 48) { dashObjs.splice(i, 1); continue; }
+      if (o.lane !== dashLane) continue;
+      if (Math.abs(o.y - playerY) > 26) continue;
+      if (o.kind === 'pickup') {
+        const pts = o.type === 'candy' ? 50 : 25;
+        dashScore += pts;
+        AudioFX.powerup();
+        spawnFloatText(dashLaneX(o.lane), o.y - 20, `+${pts}`, '#ffe27a');
+        spawnBurst(dashLaneX(o.lane), o.y, GOLD_SPARK, 8, 50);
+        dashObjs.splice(i, 1);
+      } else if (dashInvincible <= 0) {
+        dashHits++;
+        hearts = DASH_MAX_HITS - dashHits;
+        dashInvincible = 1.2;
+        AudioFX.accident();
+        shake(3, 0.3);
+        spawnBurst(dashLaneX(o.lane), o.y, SAD_BLUE, 10, 55);
+        dashObjs.splice(i, 1);
+        if (dashHits >= DASH_MAX_HITS) { updateDashHud(); endDash(); return; }
+      }
+    }
+
+    updateParticles(dt);
+    updateFloatingTexts(dt);
+    updateDashHud();
+  }
+
+  function drawDash() {
+    ctx.imageSmoothingEnabled = false;
+    // grass field
+    const off = Math.floor(dashScroll % TILE);
+    for (let ty = -1; ty < GRID_ROWS + 1; ty++) {
+      for (let tx = 0; tx < GRID_COLS; tx++) {
+        ctx.drawImage(images.grass, tx * TILE, ty * TILE + off);
+      }
+    }
+    // road
+    const roadX = WORLD_W / 2 - (DASH_LANE_W * DASH_LANES) / 2;
+    const roadW = DASH_LANE_W * DASH_LANES;
+    ctx.fillStyle = '#8d939c';
+    ctx.fillRect(roadX, 0, roadW, WORLD_H);
+    ctx.fillStyle = '#f2f4f6';
+    ctx.fillRect(roadX - 3, 0, 3, WORLD_H);
+    ctx.fillRect(roadX + roadW, 0, 3, WORLD_H);
+    // dashed lane lines scrolling with the road
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    const dashLen = 16, gapLen = 20, seg = dashLen + gapLen;
+    const lineOff = (dashScroll % seg);
+    for (let li = 1; li < DASH_LANES; li++) {
+      const lx = roadX + li * DASH_LANE_W - 2;
+      for (let y = -seg + lineOff; y < WORLD_H; y += seg) {
+        ctx.fillRect(lx, y, 4, dashLen);
+      }
+    }
+    // roadside trees, marching down
+    const treeSeg = 96;
+    const treeOff = dashScroll % treeSeg;
+    for (let y = -treeSeg + treeOff - 48; y < WORLD_H + 48; y += treeSeg) {
+      ctx.drawImage(images.tree, roadX - 42, y);
+      ctx.drawImage(images.tree, roadX + roadW + 18, y + 44);
+    }
+
+    // objects
+    for (const o of dashObjs) {
+      const ox = dashLaneX(o.lane);
+      if (o.kind === 'obstacle') {
+        const size = o.type === 'cart' ? 34 : 28;
+        ctx.drawImage(images[o.type], ox - size / 2, o.y - size / 2, size, size);
+      } else {
+        const bob = Math.sin((performance.now() + o.y) / 160) * 2;
+        ctx.drawImage(images[o.type], ox - 11, o.y - 11 + bob, 22, 22);
+      }
+    }
+
+    // Champ sprinting ahead of you (drawn big)
+    const frame = Math.floor(performance.now() / 110) % 2;
+    const champSize = SPRITE_SIZE * DASH_CHAR_SCALE * 0.9;
+    ctx.drawImage(
+      images[`little_up_${frame}`],
+      dashLaneX(dashChampLane) - champSize / 2,
+      WORLD_H - 148,
+      champSize, champSize
+    );
+    // you, pounding pavement (blink while invincible)
+    const blink = dashInvincible > 0 && Math.floor(performance.now() / 120) % 2 === 0;
+    if (!blink) {
+      const meSize = SPRITE_SIZE * DASH_CHAR_SCALE;
+      ctx.drawImage(
+        images[`big_up_${frame}`],
+        dashLaneX(dashLane) - meSize / 2,
+        WORLD_H - 84,
+        meSize, meSize
+      );
+    }
+
+    drawParticles();
+    drawFloatingTexts();
+    ctx.imageSmoothingEnabled = true;
+  }
+
+  // swipe to change lanes (pointer events cover touch + mouse)
+  canvas.addEventListener('pointerdown', (e) => {
+    if (gameState === 'dash') dashSwipeX = e.clientX;
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (gameState !== 'dash' || dashSwipeX === null) return;
+    const dx = e.clientX - dashSwipeX;
+    dashSwipeX = null;
+    if (dx > 24) dashChangeLane(1);
+    else if (dx < -24) dashChangeLane(-1);
+    else {
+      // simple tap: left half = left, right half = right (little-kid friendly)
+      const rect = canvas.getBoundingClientRect();
+      dashChangeLane(e.clientX < rect.left + rect.width / 2 ? -1 : 1);
+    }
+  });
+
   overlayButton.addEventListener('click', () => {
     if (gameState === 'splash') {
       startIntro();
@@ -940,6 +1198,8 @@
       } else {
         startLevel(levelIndex); // retry the same level from the start
       }
+    } else if (gameState === 'dashOver') {
+      showMenu();
     } else if (gameState === 'ending') {
       showMenu();
     }
@@ -1048,6 +1308,7 @@
   menuIntroBtn.addEventListener('click', startIntro);
   if (menuLevelsBtn) menuLevelsBtn.addEventListener('click', openLevelSelect);
   if (menuEndlessBtn) menuEndlessBtn.addEventListener('click', startEndlessRun);
+  if (menuDashBtn) menuDashBtn.addEventListener('click', startDash);
   if (menuStickersBtn) menuStickersBtn.addEventListener('click', openStickerBook);
   if (sbBackBtn) sbBackBtn.addEventListener('click', () => {
     stickerBookEl.classList.add('hidden');
@@ -1718,6 +1979,7 @@
       if (introTime >= INTRO_LENGTH) finishIntro();
       return;
     }
+    if (gameState === 'dash') { updateDash(dt); return; }
     if (gameState === 'bonusRound') { updateBonusRound(dt); return; }
     if (gameState !== 'playing') { updateParticles(dt); updateFloatingTexts(dt); return; }
     updatePlayer(dt);
@@ -1956,6 +2218,7 @@
     }
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, (offsetX + shX) * dpr, (offsetY + shY) * dpr);
     if (gameState === 'intro') drawIntro();
+    else if (gameState === 'dash' || gameState === 'dashOver') drawDash();
     else if (gameState === 'bonusRound' || gameState === 'bonusComplete') drawBonusRound();
     else draw();
 
