@@ -31,6 +31,7 @@
   const lsBackBtn = document.getElementById('ls-back');
   const menuEndlessBtn = document.getElementById('menu-endless');
   const menuDashBtn = document.getElementById('menu-dash');
+  const menuMayhemBtn = document.getElementById('menu-mayhem');
   const menuStickersBtn = document.getElementById('menu-stickers');
   const stickerBookEl = document.getElementById('sticker-book');
   const sbGridEl = document.getElementById('sb-grid');
@@ -494,6 +495,9 @@
   let endlessMode = false;
   let endlessDay = 1;
   let endlessWorldIdx = 0;
+  let mayhemMode = false;
+  let mayhemSaves = 0;
+  let mayhemAlertTimer = 2;
   function worldNow() { return WORLDS[endlessMode ? endlessWorldIdx : worldIndex]; }
   let timeRemaining = 0;
   let starsThisLevel = 0;
@@ -550,9 +554,10 @@
       p.counters = Object.assign({ trophies: 0, candies: 0 }, p.counters || {});
       p.endlessBest = p.endlessBest || 0;
       p.dashBest = p.dashBest || 0;
+      p.mayhemBest = p.mayhemBest || 0;
       return p;
     } catch (e) {
-      return { stars: {}, unlocked: { home: true }, stickers: {}, counters: { trophies: 0, candies: 0 }, endlessBest: 0, dashBest: 0 };
+      return { stars: {}, unlocked: { home: true }, stickers: {}, counters: { trophies: 0, candies: 0 }, endlessBest: 0, dashBest: 0, mayhemBest: 0 };
     }
   }
   const progress = loadProgress();
@@ -591,6 +596,7 @@
     { id: 'world_school', name: 'Hall Monitor', icon: 'chalkboard', hint: 'Clear every School level.' },
     { id: 'endless_10', name: 'Marathon Champ', icon: 'cake_whole', hint: 'Reach Day 10 in Endless Mode.' },
     { id: 'dash_500', name: 'Road Runner', icon: 'little_up_0', hint: 'Dash 500 m in Potty Dash.' },
+    { id: 'mayhem_15', name: 'Crowd Control', icon: 'little_down_0', hint: 'Save 15 kids in one Potty Mayhem.' },
   ];
   function stickerCount() { return STICKERS.filter((s) => progress.stickers[s.id]).length; }
 
@@ -720,6 +726,7 @@
 
   function startEndlessRun() {
     hideMenu();
+    mayhemMode = false;
     starsTotal = 0;
     accidentsTotal = 0;
     scoreTotal = 0;
@@ -786,6 +793,14 @@
   function hideOverlay() { overlay.classList.add('hidden'); }
 
   function updateHud() {
+    if (mayhemMode) {
+      const m = Math.floor(Math.max(0, timeRemaining) / 60);
+      const s = Math.floor(Math.max(0, timeRemaining) % 60);
+      timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+      starsEl.textContent = `Saved: ${mayhemSaves}`;
+      scoreEl.textContent = `${scoreThisLevel} pts`;
+      return;
+    }
     // Goal progress replaces the old countdown clock.
     timerEl.textContent = `\u{1F4A7} ${peesFixedThisLevel}/${PEE_QUOTA}  \u{1F4A9} ${poopsFixedThisLevel}/${POOP_QUOTA}`;
     starsEl.textContent = `★ ${starsThisLevel}`;
@@ -822,13 +837,16 @@
         ? `\u{267E}\u{FE0F} Endless — Best: Day ${progress.endlessBest}`
         : '\u{267E}\u{FE0F} Endless Mode';
     }
-    // Potty Dash opens once the Park is fully cleared.
+    // Potty Dash + Potty Mayhem: always playable from the menu.
     if (menuDashBtn) {
-      const parkDone = isWorldComplete(WORLDS[1]);
-      menuDashBtn.classList.toggle('hidden', !parkDone);
       menuDashBtn.innerHTML = progress.dashBest > 0
         ? `\u{1F3C3} Potty Dash — Best: ${progress.dashBest} m`
         : '\u{1F3C3} Potty Dash';
+    }
+    if (menuMayhemBtn) {
+      menuMayhemBtn.innerHTML = progress.mayhemBest > 0
+        ? `\u{1F579} Potty Mayhem — Best: ${progress.mayhemBest} pts`
+        : '\u{1F579} Potty Mayhem';
     }
     if (menuStickersBtn) {
       menuStickersBtn.innerHTML = `\u{1F4D6} Sticker Book (${stickerCount()}/${STICKERS.length})`;
@@ -918,6 +936,91 @@
     );
   }
 
+  // ---------- Potty Mayhem (arcade mode: one house, one potty, LOTS of kids) ----------
+  // ~24 Champs wander the whole house. The director picks who suddenly has to
+  // go — figure out who's alerting, grab them, deliver. 2 minutes, high score.
+  const MAYHEM_TIME = 120;
+  const MAYHEM_KIDS = 24;
+  const MAYHEM_MISS_PENALTY = 100;
+  const MAYHEM_MAX_ALERTS_CAP = 4;
+
+  function mayhemMaxAlerts() {
+    return Math.min(MAYHEM_MAX_ALERTS_CAP, 1 + Math.floor((MAYHEM_TIME - timeRemaining) / 25));
+  }
+  function mayhemActiveAlerts() {
+    return toddlers.reduce((n, t) => n + (t.alertActive ? 1 : 0), 0);
+  }
+
+  function startMayhem() {
+    hideMenu();
+    endlessMode = false;
+    worldIndex = 0;             // home flags (mom's salon says hi)
+    mayhemMode = true;
+    mayhemSaves = 0;
+    mayhemAlertTimer = 2.5;
+    level = Object.assign({}, WORLDS[0].levels[4], {
+      label: 'Potty Mayhem',
+      alertTimeLimit: 11,
+      fleeSpeed: 88,
+      wanderSpeed: 40,
+    });
+    levelIndex = 4;
+    initLevelState();
+    timeRemaining = MAYHEM_TIME;
+    // replace the standard toddler spawn with the crowd
+    toddlers = [];
+    for (let i = 0; i < MAYHEM_KIDS; i++) {
+      const t = makeToddler();
+      const p = pickRandomOpenPoint(level);
+      t.x = p.x - t.w / 2; t.y = p.y - t.h / 2;
+      t.wanderTarget = pickRandomRoomPoint(level.rooms);
+      t.nextAlertIn = Infinity;  // the director decides who alerts, not the kids
+      toddlers.push(t);
+    }
+    trophy.active = false;
+    trophy.spawnedThisLevel = true; // no trophies in the chaos
+    heartsEl.style.display = 'none';
+    updateHud();
+  }
+
+  // Called every frame while mayhem runs: paces the alert chaos.
+  function updateMayhemDirector(dt) {
+    mayhemAlertTimer -= dt;
+    if (mayhemAlertTimer > 0) return;
+    const elapsed = MAYHEM_TIME - timeRemaining;
+    mayhemAlertTimer = randRange(Math.max(1.6, 4.5 - elapsed / 45), Math.max(2.6, 6 - elapsed / 45));
+    if (mayhemActiveAlerts() >= mayhemMaxAlerts()) return;
+    const calm = toddlers.filter((t) => !t.alertActive && t.state === 'wander');
+    if (calm.length === 0) return;
+    const t = calm[Math.floor(Math.random() * calm.length)];
+    t.alertActive = true;
+    t.alertType = Math.random() < 0.55 ? 'pee' : 'poop';
+    t.alertTimeRemaining = level.alertTimeLimit + (t.alertType === 'poop' ? POOP_EXTRA_TIME : 0);
+    t.jukeTimer = 0;
+    t.jukeAngle = 0;
+    t.joltTimer = ALERT_JOLT_TIME;
+    t.state = 'fleeing';
+    const tc = centerOf(t);
+    spawnBurst(tc.x, tc.y + 8, PUFF_WHITE, 6, 55);
+    AudioFX.alert();
+  }
+
+  function endMayhem() {
+    mayhemMode = false;
+    gameState = 'mayhemOver';
+    AudioFX.stopMusic();
+    AudioFX.fanfare();
+    heartsEl.style.display = '';
+    if (scoreThisLevel > progress.mayhemBest) { progress.mayhemBest = scoreThisLevel; saveProgress(); }
+    if (mayhemSaves >= 15) awardSticker('mayhem_15');
+    showOverlay(
+      'MAYHEM over!',
+      `Kids saved: <strong>${mayhemSaves}</strong> &nbsp;|&nbsp; Score: ${scoreThisLevel} pts` +
+      `<br><small>Best mayhem: ${progress.mayhemBest} pts</small>`,
+      'Back to Menu'
+    );
+  }
+
   // ---------- Potty Dash (lane-runner mode, unlocked after the Park) ----------
   // Champ REALLY has to go and he's sprinting down the street to the potty.
   // Swipe (or arrow keys) to change lanes, grab candy and toys, dodge the mess.
@@ -950,6 +1053,7 @@
 
   function startDash() {
     hideMenu();
+    mayhemMode = false;
     gameState = 'dash';
     dashScroll = 0;
     dashSpeed = DASH_START_SPEED;
@@ -1200,6 +1304,8 @@
       }
     } else if (gameState === 'dashOver') {
       showMenu();
+    } else if (gameState === 'mayhemOver') {
+      showMenu();
     } else if (gameState === 'ending') {
       showMenu();
     }
@@ -1207,6 +1313,7 @@
 
   function startRunAt(wIdx, lIdx) {
     endlessMode = false;
+    mayhemMode = false;
     worldIndex = wIdx;
     hideMenu();
     levelSelectEl.classList.add('hidden');
@@ -1309,6 +1416,7 @@
   if (menuLevelsBtn) menuLevelsBtn.addEventListener('click', openLevelSelect);
   if (menuEndlessBtn) menuEndlessBtn.addEventListener('click', startEndlessRun);
   if (menuDashBtn) menuDashBtn.addEventListener('click', startDash);
+  if (menuMayhemBtn) menuMayhemBtn.addEventListener('click', startMayhem);
   if (menuStickersBtn) menuStickersBtn.addEventListener('click', openStickerBook);
   if (sbBackBtn) sbBackBtn.addEventListener('click', () => {
     stickerBookEl.classList.add('hidden');
@@ -1528,7 +1636,10 @@
         if (s.scrubTick <= 0) { AudioFX.scrub(); s.scrubTick = 0.22; }
         if (s.progress >= SCRUB_TIME) {
           stains.splice(i, 1);
-          if (hearts < 3) hearts++;
+          if (mayhemMode) {
+            scoreThisLevel += 50;
+            spawnFloatText(sx, sy - 12, '+50', '#9fe8a9');
+          } else if (hearts < 3) hearts++;
           hasMop = false;               // mop is used up, heads back to its bucket
           mopRespawnTimer = MOP_RESPAWN;
           AudioFX.clean();
@@ -1682,7 +1793,6 @@
       t.alertTimeRemaining -= dt;
       if (t.alertTimeRemaining <= 0) {
         stains.push({ type: t.alertType, x: t.x, y: t.y });
-        hearts = Math.max(0, hearts - 1);
         accidentsThisLevel++;
         savesStreakThisLevel = 0;
         AudioFX.accident();
@@ -1691,9 +1801,17 @@
         t.alertActive = false;
         t.state = 'wander';
         t.wanderTarget = pickRandomRoomPoint(level.rooms);
-        t.nextAlertIn = randRange(level.alertMin, level.alertMax);
-        updateHud();
-        if (hearts <= 0) { gameOver(); return; }
+        t.nextAlertIn = mayhemMode ? Infinity : randRange(level.alertMin, level.alertMax);
+        if (mayhemMode) {
+          // mayhem: misses cost points, not hearts
+          scoreThisLevel = Math.max(0, scoreThisLevel - MAYHEM_MISS_PENALTY);
+          spawnFloatText(t.x + t.w / 2, t.y - 14, `-${MAYHEM_MISS_PENALTY}`, '#6fb3ff');
+          updateHud();
+        } else {
+          hearts = Math.max(0, hearts - 1);
+          updateHud();
+          if (hearts <= 0) { gameOver(); return; }
+        }
       }
     }
 
@@ -1780,10 +1898,11 @@
           AudioFX.success();
           spawnBurst(sx, sy, GOLD_SPARK, 14, 70);
           spawnFloatText(sx, sy - 18, `+${earned}`, isPoop ? '#ffb37a' : '#ffe27a');
-          t.nextAlertIn = randRange(level.alertMin, level.alertMax);
+          t.nextAlertIn = mayhemMode ? Infinity : randRange(level.alertMin, level.alertMax);
+          if (mayhemMode) mayhemSaves++;
           updateHud();
-          // Level is complete once both goals are met.
-          if (peesFixedThisLevel >= PEE_QUOTA && poopsFixedThisLevel >= POOP_QUOTA) {
+          // Level is complete once both goals are met (story/endless only).
+          if (!mayhemMode && peesFixedThisLevel >= PEE_QUOTA && poopsFixedThisLevel >= POOP_QUOTA) {
             endLevel();
           }
           break;
@@ -1983,8 +2102,17 @@
     if (gameState === 'bonusRound') { updateBonusRound(dt); return; }
     if (gameState !== 'playing') { updateParticles(dt); updateFloatingTexts(dt); return; }
     updatePlayer(dt);
+    if (mayhemMode) {
+      updateMayhemDirector(dt);
+      timeRemaining -= dt;
+      if (timeRemaining <= 0) {
+        timeRemaining = 0;
+        endMayhem();
+        return;
+      }
+    }
     updateToddlerAI(dt);
-    updateTrophy(dt);
+    if (!mayhemMode) updateTrophy(dt);
     updateShoePickup(dt);
     updateCandy(dt);
     updateMop(dt);
