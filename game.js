@@ -21,6 +21,8 @@
   const pauseBtn = document.getElementById('btn-pause');
   const howToPlayEl = document.getElementById('howtoplay');
   const htpStartBtn = document.getElementById('htp-start');
+  const bonusHowtoEl = document.getElementById('bonus-howto');
+  const bonusHowtoStartBtn = document.getElementById('bonus-howto-start');
 
   // ---------- Asset loading ----------
   const SPRITE_NAMES = [
@@ -479,6 +481,12 @@
   function markTutorialSeen() {
     try { localStorage.setItem('pottychamp_seen_tutorial', '1'); } catch (e) {}
   }
+  function hasSeenBonusHowto() {
+    try { return localStorage.getItem('pottychamp_seen_bonus_howto') === '1'; } catch (e) { return false; }
+  }
+  function markBonusHowtoSeen() {
+    try { localStorage.setItem('pottychamp_seen_bonus_howto', '1'); } catch (e) {}
+  }
   const TURBO_MAX = 5;      // seconds of turbo in a full power bar
   const TURBO_MULT = 1.6;
   let turboMeter = TURBO_MAX;
@@ -698,7 +706,14 @@
     } else if (gameState === 'paused') {
       togglePause();
     } else if (gameState === 'levelComplete') {
-      startBonusRound();
+      // First time reaching a bonus round, show the how-to screen. After that
+      // it goes straight into the round.
+      if (!hasSeenBonusHowto()) {
+        hideOverlay();
+        bonusHowtoEl.classList.remove('hidden');
+      } else {
+        startBonusRound();
+      }
     } else if (gameState === 'bonusComplete') {
       const completedIdx = levelIndex;
       if (completedIdx + 1 < LEVELS.length) {
@@ -746,6 +761,11 @@
     } else {
       beginRun();
     }
+  });
+  bonusHowtoStartBtn.addEventListener('click', () => {
+    markBonusHowtoSeen();
+    bonusHowtoEl.classList.add('hidden');
+    startBonusRound();
   });
   menuIntroBtn.addEventListener('click', startIntro);
   pauseBtn.addEventListener('click', togglePause);
@@ -1166,8 +1186,21 @@
         }
       }
     } else {
-      const cs = BONUS_SCENE.chestSpot;
-      if (Math.hypot(pc.x - cs.x, pc.y - cs.y) < CHEST_RADIUS) {
+      // Drop the toy when the player touches the chest from ANY side. The chest
+      // is a solid object you can't stand on, so we treat its whole footprint
+      // (plus a small reach margin) as the active drop zone — not just its
+      // exact center point.
+      const chest = BONUS_SCENE.furniture.find((f) => f.type === 'toybox');
+      const cr = furniturePixelRect(chest);
+      const CHEST_REACH = 16;
+      const dropZone = {
+        x: cr.x - CHEST_REACH,
+        y: cr.y - CHEST_REACH,
+        w: cr.w + CHEST_REACH * 2,
+        h: cr.h + CHEST_REACH * 2,
+      };
+      if (aabbOverlap(collBox(player), dropZone)) {
+        const cs = BONUS_SCENE.chestSpot;
         bonusScore += TOY_POINTS;
         toysCollected++;
         carriedToy = null;

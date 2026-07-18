@@ -505,6 +505,68 @@ canvas#game {
 }
 #htp-start:active { transform: scale(0.96); }
 
+/* ---- Bonus round how-to (reuses the .htp-item card style) ---- */
+#bonus-howto {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: rgba(10,11,16,0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+#bonus-howto.hidden { display: none; }
+#bonus-howto .bh-box {
+  width: 100%;
+  max-width: 420px;
+  max-height: 92vh;
+  overflow-y: auto;
+  color: #fff;
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 8px;
+}
+#bonus-howto h1 {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: linear-gradient(180deg, #ffe27a, #ff9d00);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+#bonus-howto .bh-intro {
+  font-size: 14px;
+  line-height: 1.4;
+  color: #d8dae2;
+  max-width: 340px;
+}
+#bonus-howto .bh-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  text-align: left;
+}
+#bonus-howto-start {
+  margin-top: 4px;
+  padding: 14px 40px;
+  font-size: 19px;
+  font-weight: 800;
+  border-radius: 30px;
+  border: none;
+  background: #ffc400;
+  color: #1a1a1a;
+  box-shadow: 0 6px 20px rgba(255,196,0,0.35);
+  -webkit-tap-highlight-color: transparent;
+}
+#bonus-howto-start:active { transform: scale(0.96); }
+
 #parent-gate {
   position: absolute;
   inset: 0;
