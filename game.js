@@ -467,6 +467,15 @@
   const CANDY_RADIUS = 15;
   const CANDY_PLAYER_POINTS = 75;  // reward for snatching it before him
 
+  // Escape jolt: the instant an alert starts, the toddler bursts straight away
+  // from the player for a beat — so you can't just ride his hip and wait.
+  const ALERT_JOLT_TIME = 0.45;    // seconds of burst
+  const ALERT_JOLT_MULT = 2.4;     // speed multiplier during the burst
+
+  // Twins levels are the hardest in the game, so the player gets help there:
+  const TWINS_ALERT_TIME_BONUS = 2;   // extra seconds on every alert countdown
+  const TWINS_TURBO_BONUS = 2.5;      // extra seconds of sprint in the power bar
+
   const PEE_POINTS = 100;
   const POOP_POINTS = 160;
   const TIME_BONUS_PER_SEC = 12;   // x seconds left on the alert clock at delivery
@@ -606,8 +615,9 @@
     showNextToast();
   }
   const TURBO_MAX = 5;      // seconds of turbo in a full power bar
+  function maxTurbo() { return TURBO_MAX + (worldNow().twins ? TWINS_TURBO_BONUS : 0); }
   const TURBO_MULT = 1.6;
-  let turboMeter = TURBO_MAX;
+  let turboMeter = maxTurbo();
   let turboSparkTimer = 0;
   const shoePickup = { active: false, x: 0, y: 0, life: 0, respawnIn: 8 };
   const candyPickup = { active: false, x: 0, y: 0, life: 0, respawnIn: 10 };
@@ -637,7 +647,7 @@
       state: 'wander', wanderTarget: null, stuckTimer: 0,
       alertActive: false, alertType: null, alertTimeRemaining: 0, nextAlertIn: 0,
       relieveTimer: 0, jukeTimer: 0, jukeAngle: 0,
-      turboTimer: 0, sparkTimer: 0, isTwin: false,
+      turboTimer: 0, sparkTimer: 0, isTwin: false, joltTimer: 0,
     };
   }
   let toddlers = [makeToddler()];
@@ -733,7 +743,7 @@
     hearts = 3;
     stains = [];
     particles.length = 0;
-    turboMeter = TURBO_MAX;
+    turboMeter = maxTurbo();
     shoePickup.active = false;
     shoePickup.respawnIn = randRange(6, 10);
     hasMop = false;
@@ -780,7 +790,7 @@
     heartImgs.forEach((img, i) => {
       img.src = i < hearts ? 'assets/heart_full.png' : 'assets/heart_empty.png';
     });
-    turboFillEl.style.width = `${(turboMeter / TURBO_MAX) * 100}%`;
+    turboFillEl.style.width = `${(turboMeter / maxTurbo()) * 100}%`;
   }
 
   function updateBonusHud() {
@@ -789,7 +799,7 @@
     timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
     starsEl.textContent = `\u{1F9F8} ${toysCollected}`;
     scoreEl.textContent = `${bonusScore} pts`;
-    turboFillEl.style.width = `${(turboMeter / TURBO_MAX) * 100}%`;
+    turboFillEl.style.width = `${(turboMeter / maxTurbo()) * 100}%`;
   }
 
   // ---------- Menu / intro / pause flow ----------
@@ -872,7 +882,7 @@
     carriedToy = null;
     bonusToys = BONUS_SCENE.presetToys.map((t) => ({ ...t }));
     bonusSpawnTimer = randRange(4, 7);
-    turboMeter = TURBO_MAX;
+    turboMeter = maxTurbo();
     particles.length = 0;
     const sp = BONUS_SCENE.playerStart;
     player.x = sp.x * TILE; player.y = sp.y * TILE; player.facing = 'down'; player.moving = false;
@@ -1203,7 +1213,7 @@
   function updateShoePickup(dt) {
     if (!shoePickup.active) {
       shoePickup.respawnIn -= dt;
-      if (shoePickup.respawnIn <= 0 && turboMeter < TURBO_MAX) {
+      if (shoePickup.respawnIn <= 0 && turboMeter < maxTurbo()) {
         const p = pickRandomRoomPoint(level.rooms);
         shoePickup.x = p.x;
         shoePickup.y = p.y;
@@ -1221,7 +1231,7 @@
       if (Math.hypot(pc.x - shoePickup.x, pc.y - shoePickup.y) < 18) {
         shoePickup.active = false;
         shoePickup.respawnIn = randRange(10, 16);
-        turboMeter = TURBO_MAX;
+        turboMeter = maxTurbo();
         AudioFX.powerup();
         spawnBurst(shoePickup.x, shoePickup.y, GOLD_SPARK, 12, 60);
       }
@@ -1387,10 +1397,17 @@
       if (t.nextAlertIn <= 0) {
         t.alertActive = true;
         t.alertType = Math.random() < 0.55 ? 'pee' : 'poop';
-        t.alertTimeRemaining = level.alertTimeLimit + (t.alertType === 'poop' ? POOP_EXTRA_TIME : 0);
+        t.alertTimeRemaining = level.alertTimeLimit
+          + (t.alertType === 'poop' ? POOP_EXTRA_TIME : 0)
+          + (worldNow().twins ? TWINS_ALERT_TIME_BONUS : 0);
         t.jukeTimer = 0;
         t.jukeAngle = 0;
+        t.joltTimer = ALERT_JOLT_TIME; // burst away from whoever's tailgating him
         t.state = 'fleeing';
+        {
+          const tc0 = centerOf(t);
+          spawnBurst(tc0.x, tc0.y + 8, PUFF_WHITE, 6, 55);
+        }
         AudioFX.alert();
         alertCount++;
         if (!trophy.spawnedThisLevel && alertCount === trophy.spawnOnAlertIndex) {
@@ -1431,9 +1448,12 @@
         let vx = tc.x - pc.x, vy = tc.y - pc.y;
         const len = Math.hypot(vx, vy) || 1;
         vx /= len; vy /= len;
+        const jolting = t.joltTimer > 0;
+        if (jolting) t.joltTimer -= dt;
         // Poop jukes: every so often the toddler darts sideways off the straight
         // "run away" line to shake you off. Pee-toddlers run straight (angle 0).
-        if (t.alertType === 'poop') {
+        // (No jukes during the jolt — he books it directly away from you.)
+        if (!jolting && t.alertType === 'poop') {
           t.jukeTimer -= dt;
           if (t.jukeTimer <= 0) {
             t.jukeTimer = randRange(POOP_JUKE_MIN_INTERVAL, POOP_JUKE_MAX_INTERVAL);
@@ -1443,7 +1463,7 @@
           const rx = vx * ca - vy * sa, ry = vx * sa + vy * ca;
           vx = rx; vy = ry;
         }
-        const fleeSpeed = toddlerFleeSpeed(t);
+        const fleeSpeed = toddlerFleeSpeed(t) * (jolting ? ALERT_JOLT_MULT : 1);
         const dx = vx * fleeSpeed * dt, dy = vy * fleeSpeed * dt;
         t.moving = true;
         if (Math.abs(dx) > Math.abs(dy)) t.facing = dx > 0 ? 'right' : 'left';
