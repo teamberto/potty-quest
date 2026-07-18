@@ -516,6 +516,7 @@
   let animClock = 0;
   let introTime = 0;
   let introSavedBurst = false;
+  let introTitleBurst = false;
   let introSparkTimer = 0;
   let peeSavedRun = 0;
   let poopSavedRun = 0;
@@ -879,6 +880,7 @@
     gameState = 'intro';
     introTime = 0;
     introSavedBurst = false;
+    introTitleBurst = false;
     introSparkTimer = 0;
     particles.length = 0;
     AudioFX.introMusic();
@@ -1942,11 +1944,11 @@
   const INTRO_LENGTH = 8;
   function introDemoPos(t) {
     const p = Math.min(1, (t - 3.2) / 2.2);
-    const potX = 10.5 * TILE;
-    const startX = 30;
-    const y = 7.4 * TILE;
-    const todX = startX + (potX - 30 - startX) * p;
-    return { tod: { x: todX, y }, bro: { x: todX - 34, y }, done: p >= 1 };
+    const startX = 60;
+    const potX = WORLD_W - 130;
+    const y = WORLD_H / 2 + 22;
+    const todX = startX + (potX - 70 - startX) * p;
+    return { tod: { x: todX, y }, bro: { x: todX - 62, y }, potX, y, done: p >= 1 };
   }
 
   function updateIntro(dt) {
@@ -1956,14 +1958,21 @@
       if (!d.done) {
         introSparkTimer -= dt;
         if (introSparkTimer <= 0) {
-          introSparkTimer = 0.08;
-          spawnBurst(d.bro.x + 12, d.bro.y + 20, GOLD_SPARK, 2, 25);
+          introSparkTimer = 0.07;
+          // dust kicking up behind both runners
+          spawnBurst(d.bro.x + 8, d.bro.y + 44, PUFF_WHITE, 2, 30);
+          spawnBurst(d.tod.x + 8, d.tod.y + 44, PUFF_WHITE, 1, 25);
         }
       } else if (!introSavedBurst) {
         introSavedBurst = true;
-        spawnBurst(10.5 * TILE, 8 * TILE, GOLD_SPARK, 16, 70);
+        spawnBurst(WORLD_W - 130, WORLD_H / 2 + 30, GOLD_SPARK, 22, 90);
+        shake(3, 0.35);
         AudioFX.success();
       }
+    }
+    if (t > 6.45 && !introTitleBurst) {
+      introTitleBurst = true;
+      spawnBurst(WORLD_W / 2, WORLD_H / 2 - 24, GOLD_SPARK, 26, 110);
     }
   }
 
@@ -1974,56 +1983,127 @@
     return 1;
   }
 
+  // pop-in with a little overshoot — the classic "trailer text" landing
+  function easeOutBack(x) {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+  }
+  function popScale(t, start, dur = 0.5) {
+    const p = Math.max(0, Math.min(1, (t - start) / dur));
+    return p <= 0 ? 0 : easeOutBack(p);
+  }
+  function introPopText(text, cx, cy, size, fill, t, start, endFade) {
+    const s = popScale(t, start);
+    if (s <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = endFade ? fadeAlpha(t, start, endFade) : Math.min(1, (t - start) / 0.2);
+    ctx.translate(cx, cy);
+    ctx.scale(s, s);
+    ctx.font = `900 ${size}px -apple-system, "Helvetica Neue", sans-serif`;
+    ctx.lineWidth = Math.max(4, size / 6);
+    ctx.strokeStyle = 'rgba(10,8,4,0.9)';
+    ctx.strokeText(text, 0, 0);
+    ctx.fillStyle = fill;
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  }
+  function introBackdrop() {
+    const g = ctx.createLinearGradient(0, 0, 0, WORLD_H);
+    g.addColorStop(0, '#1b1e2e');
+    g.addColorStop(1, '#0b0c12');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    // vignette
+    const v = ctx.createRadialGradient(WORLD_W / 2, WORLD_H / 2, WORLD_H / 3, WORLD_W / 2, WORLD_H / 2, WORLD_H);
+    v.addColorStop(0, 'rgba(0,0,0,0)');
+    v.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+  }
+
   function drawIntro() {
     const t = introTime;
-    ctx.fillStyle = '#0b0c12';
-    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    introBackdrop();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+
     if (t < 3.2) {
-      ctx.fillStyle = '#fff';
-      ctx.font = '700 26px -apple-system, "Helvetica Neue", sans-serif';
       if (t < 1.6) {
-        ctx.globalAlpha = fadeAlpha(t, 0, 1.6);
-        ctx.fillText('THIS SUMMER…', WORLD_W / 2, WORLD_H / 2);
+        introPopText('THIS SUMMER…', WORLD_W / 2, WORLD_H / 2, 28, '#ffffff', t, 0.1, 1.6);
       } else {
-        ctx.globalAlpha = fadeAlpha(t, 1.6, 3.2);
-        ctx.fillText('ONE BIG BROTHER.', WORLD_W / 2, WORLD_H / 2 - 18);
-        ctx.fillText('ONE TINY BLADDER.', WORLD_W / 2, WORLD_H / 2 + 18);
+        introPopText('ONE BIG BROTHER.', WORLD_W / 2, WORLD_H / 2 - 22, 26, '#ffffff', t, 1.7, 3.2);
+        introPopText('ONE TINY BLADDER.', WORLD_W / 2, WORLD_H / 2 + 22, 26, '#ffd23f', t, 2.1, 3.2);
       }
-      ctx.globalAlpha = 1;
     } else if (t < 6.2) {
-      drawTilemap();
-      drawPottySpots();
+      // spotlight stage: big 2x actors sprinting for a big potty
       const d = introDemoPos(t);
+      const spot = ctx.createRadialGradient(WORLD_W / 2, d.y + 40, 30, WORLD_W / 2, d.y + 40, WORLD_W / 2);
+      spot.addColorStop(0, 'rgba(255,226,122,0.14)');
+      spot.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = spot;
+      ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+      // floor line
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(30, d.y + 48, WORLD_W - 60, 2);
+      // the potty (big)
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(images.potty, d.potX, d.y + 2, 48, 48);
       if (!d.done) {
-        const frame = Math.floor(t * 8) % 2;
-        ctx.drawImage(images[`big_side_${frame}`], d.bro.x, d.bro.y);
-        ctx.drawImage(images[`little_side_${frame}`], d.tod.x, d.tod.y);
-        const bob = Math.sin(t * 18) * 3;
-        ctx.drawImage(images.icon_pee, d.tod.x + 4, d.tod.y - 20 + bob, 16, 16);
+        const frame = Math.floor(t * 9) % 2;
+        ctx.drawImage(images[`big_side_${frame}`], d.bro.x, d.bro.y, 48, 48);
+        ctx.drawImage(images[`little_side_${frame}`], d.tod.x, d.tod.y, 48, 48);
+        const bob = Math.sin(t * 18) * 4;
+        ctx.drawImage(images.icon_pee, d.tod.x + 12, d.tod.y - 30 + bob, 24, 24);
       } else {
-        ctx.drawImage(images.little_down_0, 10.5 * TILE - 34, 8 * TILE - 12);
-        ctx.drawImage(images.big_down_0, 10.5 * TILE + 12, 8 * TILE - 12);
-        ctx.font = '800 30px -apple-system, "Helvetica Neue", sans-serif';
-        ctx.fillStyle = '#ffd23f';
-        ctx.fillText('SAVED! ★', WORLD_W / 2, WORLD_H / 2 - 60);
+        ctx.drawImage(images.little_down_0, d.potX - 54, d.y + 2, 48, 48);
+        ctx.drawImage(images.big_down_0, d.potX + 52, d.y + 2, 48, 48);
+        introPopText('SAVED! ★', WORLD_W / 2, WORLD_H / 2 - 58, 34, '#ffd23f', t, 5.4);
       }
+      ctx.imageSmoothingEnabled = true;
       drawParticles();
     } else {
-      const k = Math.min(1, (t - 6.2) / 0.5);
-      ctx.fillStyle = '#ffc400';
-      ctx.font = `900 ${Math.round(22 + 38 * k)}px -apple-system, "Helvetica Neue", sans-serif`;
-      ctx.fillText('POTTY CHAMP', WORLD_W / 2, WORLD_H / 2 - 10);
-      ctx.globalAlpha = k;
-      ctx.fillStyle = '#fff';
-      ctx.font = '600 16px -apple-system, "Helvetica Neue", sans-serif';
-      ctx.fillText('Can you save the day… and the floors?', WORLD_W / 2, WORLD_H / 2 + 30);
-      ctx.globalAlpha = 1;
+      // title card: layered gold logo, characters, tagline
+      const s = popScale(t, 6.2, 0.6);
+      if (s > 0) {
+        ctx.save();
+        ctx.translate(WORLD_W / 2, WORLD_H / 2 - 26);
+        ctx.scale(s, s);
+        ctx.font = '900 54px -apple-system, "Helvetica Neue", sans-serif';
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = '#1a1408';
+        ctx.strokeText('POTTY CHAMP', 0, 0);
+        const lg = ctx.createLinearGradient(0, -30, 0, 22);
+        lg.addColorStop(0, '#ffe27a');
+        lg.addColorStop(1, '#ff9d00');
+        ctx.fillStyle = lg;
+        ctx.fillText('POTTY CHAMP', 0, 0);
+        ctx.restore();
+      }
+      const s2 = popScale(t, 6.6, 0.5);
+      if (s2 > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, (t - 6.6) / 0.3);
+        ctx.font = '600 16px -apple-system, "Helvetica Neue", sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.fillText('Can you save the day… and the floors?', WORLD_W / 2, WORLD_H / 2 + 22);
+        ctx.restore();
+        // the heroes, front and center
+        ctx.imageSmoothingEnabled = false;
+        const bobT = Math.sin(t * 6) * 2;
+        ctx.drawImage(images.big_down_0, WORLD_W / 2 - 56, WORLD_H / 2 + 40 + bobT, 48, 48);
+        ctx.drawImage(images.little_down_0, WORLD_W / 2 + 10, WORLD_H / 2 + 44 - bobT, 44, 44);
+        ctx.imageSmoothingEnabled = true;
+      }
+      drawParticles();
     }
+
+    // cinematic letterbox bars
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, WORLD_W, 24);
+    ctx.fillRect(0, WORLD_H - 24, WORLD_W, 24);
     ctx.font = '600 11px -apple-system, "Helvetica Neue", sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillText('tap to skip', WORLD_W / 2, WORLD_H - 14);
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.fillText('tap to skip', WORLD_W / 2, WORLD_H - 12);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
   }
@@ -2360,7 +2440,12 @@
 
   resize();
   loadAssets(() => {
-    showOverlay('Potty Champ', 'The ultimate potty-training rescue mission.', 'Tap to Begin');
+    showOverlay(
+      'Potty Champ',
+      'The ultimate potty-training rescue mission.',
+      'Tap to Begin',
+      '<div class="splash-chars"><img src="assets/big_down_0.png" alt=""><img src="assets/little_down_0.png" alt=""></div>'
+    );
     requestAnimationFrame(loop);
   });
 })();

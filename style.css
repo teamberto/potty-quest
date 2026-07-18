@@ -316,7 +316,14 @@ canvas#game {
 }
 
 #overlay h1 {
-  font-size: 40px;
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: linear-gradient(180deg, #ffe27a, #ff9d00);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 0 rgba(26,20,8,0.9)) drop-shadow(0 6px 18px rgba(255,157,0,0.35));
 }
 
 #overlay p {
@@ -786,6 +793,120 @@ canvas#game {
   image-rendering: pixelated;
 }
 #sticker-toast strong { color: #ffe27a; }
+
+/* ---- Splash + presentation juice ---- */
+.splash-chars {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 14px;
+  margin-top: 12px;
+}
+.splash-chars img {
+  width: 56px;
+  height: 56px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+  animation: splash-bounce 1.6s ease-in-out infinite;
+}
+.splash-chars img:last-child {
+  width: 48px;
+  height: 48px;
+  animation-delay: 0.35s;
+}
+@keyframes splash-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+
+.cta-pulse {
+  animation: cta-pulse 1.5s ease-in-out infinite;
+}
+@keyframes cta-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 6px 20px rgba(255,196,0,0.35); }
+  50% { transform: scale(1.05); box-shadow: 0 8px 30px rgba(255,196,0,0.55); }
+}
+#overlay button.cta,
+#overlay button {
+  animation: cta-pulse 1.5s ease-in-out infinite;
+}
+
+/* ---- How to Play: 1-2-3 comic strip ---- */
+#htp-steps {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.htp-step {
+  position: relative;
+  flex: 1;
+  max-width: 116px;
+  background: rgba(255,196,0,0.09);
+  border: 1px solid rgba(255,196,0,0.4);
+  border-radius: 14px;
+  padding: 14px 6px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.htp-step img {
+  width: 34px;
+  height: 34px;
+  image-rendering: pixelated;
+}
+.htp-step-num {
+  position: absolute;
+  top: -10px;
+  left: -6px;
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 50%;
+  background: #ffc400;
+  color: #1a1a1a;
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: 0 2px 8px rgba(255,196,0,0.5);
+}
+.htp-step-label {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #ffe27a;
+}
+.htp-step-arrow {
+  color: #ffe27a;
+  font-size: 18px;
+  opacity: 0.9;
+}
+.htp-bob { animation: htp-bob 1s ease-in-out infinite; }
+@keyframes htp-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+/* colored accents on the info cards so they don't read as a gray wall */
+.htp-item { border-left: 3px solid rgba(255,255,255,0.15); }
+#htp-grid .htp-item:nth-child(1) { border-left-color: #6fb3ff; }
+#htp-grid .htp-item:nth-child(2) { border-left-color: #c98a5a; }
+#htp-grid .htp-item:nth-child(3) { border-left-color: #ffd23f; }
+#htp-grid .htp-item:nth-child(4) { border-left-color: #ff7a8a; }
+#htp-grid .htp-item:nth-child(5) { border-left-color: #9fe8a9; }
+#htp-grid .htp-item:nth-child(6) { border-left-color: #ffe27a; }
+.bh-grid .htp-item:nth-child(1) { border-left-color: #9fe8a9; }
+.bh-grid .htp-item:nth-child(2) { border-left-color: #c98a5a; }
+.bh-grid .htp-item:nth-child(3) { border-left-color: #ffe27a; }
+.bh-grid .htp-item:nth-child(4) { border-left-color: #ff7a8a; }
+
+/* soft golden glow behind the instruction screens */
+#howtoplay, #bonus-howto {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255,196,0,0.10), rgba(0,0,0,0) 55%),
+    rgba(10,11,16,0.94);
+}
 
 #parent-gate {
   position: absolute;
