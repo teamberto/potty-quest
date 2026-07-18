@@ -248,7 +248,7 @@ const WORLDS = [
   { id: 'home', label: 'Home', icon: 'potty', momSalon: true, candy: false, levels: LEVELS },
   { id: 'park', label: 'The Park', icon: 'tree', momSalon: false, candy: true, levels: LEVELS_PARK },
   { id: 'store', label: 'Grocery Store', icon: 'cart', momSalon: false, candy: true, levels: LEVELS_STORE },
-  { id: 'school', label: 'School', icon: 'chalkboard', momSalon: false, candy: true, levels: LEVELS_SCHOOL },
+  { id: 'school', label: 'School', icon: 'chalkboard', momSalon: false, candy: true, twins: true, levels: LEVELS_SCHOOL },
 ];
 
 // ---------- Backyard bonus round (runs after every level) ----------

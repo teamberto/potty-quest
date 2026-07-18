@@ -29,6 +29,13 @@
   const lsLevelsEl = document.getElementById('ls-levels');
   const lsHintEl = document.getElementById('ls-hint');
   const lsBackBtn = document.getElementById('ls-back');
+  const menuEndlessBtn = document.getElementById('menu-endless');
+  const menuStickersBtn = document.getElementById('menu-stickers');
+  const stickerBookEl = document.getElementById('sticker-book');
+  const sbGridEl = document.getElementById('sb-grid');
+  const sbCountEl = document.getElementById('sb-count');
+  const sbBackBtn = document.getElementById('sb-back');
+  const stickerToastEl = document.getElementById('sticker-toast');
 
   // ---------- Asset loading ----------
   const SPRITE_NAMES = [
@@ -474,12 +481,16 @@
   let worldIndex = 0;
   let levelIndex = 0;
   let level = WORLDS[0].levels[0];
-  function worldNow() { return WORLDS[worldIndex]; }
+  let endlessMode = false;
+  let endlessDay = 1;
+  let endlessWorldIdx = 0;
+  function worldNow() { return WORLDS[endlessMode ? endlessWorldIdx : worldIndex]; }
   let timeRemaining = 0;
   let starsThisLevel = 0;
   let peesFixedThisLevel = 0;
   let poopsFixedThisLevel = 0;
   let trophyGrabbedThisLevel = false;
+  let savesStreakThisLevel = 0;
   let starsTotal = 0;
   let accidentsThisLevel = 0;
   let accidentsTotal = 0;
@@ -525,8 +536,13 @@
       p.stars = p.stars || {};
       p.unlocked = p.unlocked || { home: true };
       p.unlocked.home = true; // home is always open
+      p.stickers = p.stickers || {};
+      p.counters = Object.assign({ trophies: 0, candies: 0 }, p.counters || {});
+      p.endlessBest = p.endlessBest || 0;
       return p;
-    } catch (e) { return { stars: {}, unlocked: { home: true } }; }
+    } catch (e) {
+      return { stars: {}, unlocked: { home: true }, stickers: {}, counters: { trophies: 0, candies: 0 }, endlessBest: 0 };
+    }
   }
   const progress = loadProgress();
   function saveProgress() {
@@ -542,16 +558,59 @@
   }
   function isWorldUnlocked(w) { return !!progress.unlocked[w.id]; }
   function isWorldComplete(w) { return w.levels.every((_, i) => starsFor(w.id, i) > 0); }
+  function isWorldPerfect(w) { return w.levels.every((_, i) => starsFor(w.id, i) >= 3); }
   function isLevelPlayable(w, idx) { return idx === 0 || starsFor(w.id, idx - 1) > 0; }
   function starString(n) { return '★'.repeat(n) + '☆'.repeat(Math.max(0, 3 - n)); }
+
+  // ---------- Sticker book ----------
+  const STICKERS = [
+    { id: 'first_pee', name: 'First Splash', icon: 'icon_pee', hint: 'Save your first pee.' },
+    { id: 'first_poop', name: 'Code Brown Hero', icon: 'icon_poop', hint: 'Save your first poop.' },
+    { id: 'combo_5', name: 'Hot Streak', icon: 'icon_star', hint: '5 saves in a row in one level.' },
+    { id: 'clean_level', name: 'Squeaky Clean', icon: 'mop', hint: 'Finish a level with zero accidents.' },
+    { id: 'three_star', name: 'Perfectionist', icon: 'icon_trophy', hint: 'Earn ★★★ on any level.' },
+    { id: 'star_student', name: 'Star Student', icon: 'icon_star', hint: '★★★ every level in a world.' },
+    { id: 'trophy_5', name: 'Trophy Hunter', icon: 'icon_trophy', hint: 'Grab 5 trophies.' },
+    { id: 'candy_10', name: 'Candy Guardian', icon: 'candy', hint: 'Snatch 10 candies before Champ.' },
+    { id: 'turbo_tamer', name: 'Zoomies Wrangler', icon: 'turbo_shoe', hint: 'Catch Champ mid sugar rush.' },
+    { id: 'toy_8', name: 'Toy Tornado', icon: 'toybox', hint: 'Stash 8 toys in one bonus round.' },
+    { id: 'world_home', name: 'Home Hero', icon: 'potty', hint: 'Clear every Home level.' },
+    { id: 'world_park', name: 'Park Ranger', icon: 'tree', hint: 'Clear every Park level.' },
+    { id: 'world_store', name: 'Aisle Boss', icon: 'cart', hint: 'Clear every Grocery Store level.' },
+    { id: 'world_school', name: 'Hall Monitor', icon: 'chalkboard', hint: 'Clear every School level.' },
+    { id: 'endless_10', name: 'Marathon Champ', icon: 'cake_whole', hint: 'Reach Day 10 in Endless Mode.' },
+  ];
+  function stickerCount() { return STICKERS.filter((s) => progress.stickers[s.id]).length; }
+
+  const toastQueue = [];
+  let toastShowing = false;
+  function showNextToast() {
+    if (toastShowing || toastQueue.length === 0) return;
+    const st = toastQueue.shift();
+    toastShowing = true;
+    stickerToastEl.innerHTML =
+      `<img src="assets/${st.icon}.png" alt=""><div><strong>Sticker earned!</strong><br>${st.name}</div>`;
+    stickerToastEl.classList.add('show');
+    setTimeout(() => {
+      stickerToastEl.classList.remove('show');
+      setTimeout(() => { toastShowing = false; showNextToast(); }, 350);
+    }, 2600);
+  }
+  function awardSticker(id) {
+    if (progress.stickers[id]) return;
+    const st = STICKERS.find((s) => s.id === id);
+    if (!st) return;
+    progress.stickers[id] = true;
+    saveProgress();
+    toastQueue.push(st);
+    showNextToast();
+  }
   const TURBO_MAX = 5;      // seconds of turbo in a full power bar
   const TURBO_MULT = 1.6;
   let turboMeter = TURBO_MAX;
   let turboSparkTimer = 0;
   const shoePickup = { active: false, x: 0, y: 0, life: 0, respawnIn: 8 };
   const candyPickup = { active: false, x: 0, y: 0, life: 0, respawnIn: 10 };
-  let toddlerTurboTimer = 0;
-  let toddlerTurboSparkTimer = 0;
   const SCRUB_TIME = 1.3;
   const SCRUB_RADIUS = 26;
   const MOP_RESPAWN = 4;
@@ -572,12 +631,16 @@
   let bonusSpawnTimer = 0;
 
   const player = { x: 0, y: 0, w: SPRITE_SIZE, h: SPRITE_SIZE, facing: 'down', moving: false, animFrame: 0 };
-  const toddler = {
-    x: 0, y: 0, w: SPRITE_SIZE, h: SPRITE_SIZE, facing: 'down', moving: false, animFrame: 0,
-    state: 'wander', wanderTarget: null, stuckTimer: 0,
-    alertActive: false, alertType: null, alertTimeRemaining: 0, nextAlertIn: 0,
-    relieveTimer: 0, jukeTimer: 0, jukeAngle: 0,
-  };
+  function makeToddler() {
+    return {
+      x: 0, y: 0, w: SPRITE_SIZE, h: SPRITE_SIZE, facing: 'down', moving: false, animFrame: 0,
+      state: 'wander', wanderTarget: null, stuckTimer: 0,
+      alertActive: false, alertType: null, alertTimeRemaining: 0, nextAlertIn: 0,
+      relieveTimer: 0, jukeTimer: 0, jukeAngle: 0,
+      turboTimer: 0, sparkTimer: 0, isTwin: false,
+    };
+  }
+  let toddlers = [makeToddler()];
   let playerCurrentSpeed = 0;
 
   const TROPHY_RADIUS = 18;
@@ -590,7 +653,7 @@
     const bp = tileToPx(level.bigStart);
     player.x = bp.x; player.y = bp.y;
     const lp = tileToPx(level.littleStart);
-    toddler.x = lp.x; toddler.y = lp.y;
+    toddlers[0].x = lp.x; toddlers[0].y = lp.y;
   }
 
   function randRange(a, b) { return a + Math.random() * (b - a); }
@@ -619,16 +682,50 @@
   function startLevel(idx) {
     levelIndex = idx;
     level = worldNow().levels[idx];
+    initLevelState();
+  }
+
+  // Endless mode: rotates through the four locations, one "day" each, and the
+  // tuning tightens a little every day. How far can you go?
+  function startEndlessDay(n) {
+    endlessMode = true;
+    endlessDay = n;
+    endlessWorldIdx = (n - 1) % WORLDS.length;
+    const base = WORLDS[endlessWorldIdx].levels[WORLDS[endlessWorldIdx].levels.length - 1];
+    const k = n - 1;
+    level = Object.assign({}, base, {
+      label: `Day ${n}`,
+      alertMin: Math.max(2.2, base.alertMin - 0.12 * k),
+      alertMax: Math.max(3.4, base.alertMax - 0.16 * k),
+      wanderSpeed: Math.min(95, base.wanderSpeed + 1.5 * k),
+      fleeSpeed: Math.min(185, base.fleeSpeed + 2.5 * k),
+      alertTimeLimit: Math.max(6, base.alertTimeLimit - 0.08 * k),
+    });
+    levelIndex = WORLDS[endlessWorldIdx].levels.length - 1;
+    initLevelState();
+  }
+
+  function startEndlessRun() {
+    hideMenu();
+    starsTotal = 0;
+    accidentsTotal = 0;
+    scoreTotal = 0;
+    peeSavedRun = 0;
+    poopSavedRun = 0;
+    startEndlessDay(1);
+  }
+
+  function initLevelState() {
     timeRemaining = level.duration;
     starsThisLevel = 0;
     peesFixedThisLevel = 0;
     poopsFixedThisLevel = 0;
     accidentsThisLevel = 0;
     scoreThisLevel = 0;
+    savesStreakThisLevel = 0;
     trophyGrabbedThisLevel = false;
     candyPickup.active = false;
     candyPickup.respawnIn = randRange(7, 12);
-    toddlerTurboTimer = 0;
     trophy.active = false;
     trophy.spawnedThisLevel = false;
     trophy.spawnOnAlertIndex = 2 + Math.floor(Math.random() * 3); // spawns with the level's 2nd-4th alert
@@ -646,13 +743,20 @@
     const bp = tileToPx(level.bigStart);
     player.x = bp.x; player.y = bp.y; player.facing = 'down'; player.moving = false;
 
-    const lp = tileToPx(level.littleStart);
-    toddler.x = lp.x; toddler.y = lp.y; toddler.facing = 'down'; toddler.moving = false;
-    toddler.state = 'wander';
-    toddler.wanderTarget = pickRandomRoomPoint(level.rooms);
-    toddler.stuckTimer = 0;
-    toddler.alertActive = false;
-    toddler.nextAlertIn = randRange(level.alertMin, level.alertMax);
+    // Spawn the toddler — and his twin, in worlds marked twins (School!).
+    toddlers = [makeToddler()];
+    if (worldNow().twins) {
+      const twin = makeToddler();
+      twin.isTwin = true;
+      toddlers.push(twin);
+    }
+    toddlers.forEach((t, i) => {
+      const lp = tileToPx(level.littleStart);
+      t.x = lp.x + i * TILE; t.y = lp.y;
+      t.wanderTarget = pickRandomRoomPoint(level.rooms);
+      // stagger the twin's first alert so they don't both scream at once (at first)
+      t.nextAlertIn = randRange(level.alertMin, level.alertMax) + i * 3;
+    });
 
     updateHud();
     gameState = 'playing';
@@ -697,7 +801,34 @@
     menuHighscoreEl.textContent = b.score > 0
       ? `\u{1F3C6} Best run: ${b.score} pts (${b.total} saves — ${b.pee} pees, ${b.poop} poops)`
       : 'No high score yet — be the first Potty Champ!';
+    // Endless mode opens once School is fully cleared.
+    if (menuEndlessBtn) {
+      const schoolDone = isWorldComplete(WORLDS[WORLDS.length - 1]);
+      menuEndlessBtn.classList.toggle('hidden', !schoolDone);
+      menuEndlessBtn.innerHTML = progress.endlessBest > 0
+        ? `\u{267E}\u{FE0F} Endless — Best: Day ${progress.endlessBest}`
+        : '\u{267E}\u{FE0F} Endless Mode';
+    }
+    if (menuStickersBtn) {
+      menuStickersBtn.innerHTML = `\u{1F4D6} Sticker Book (${stickerCount()}/${STICKERS.length})`;
+    }
     menuEl.classList.remove('hidden');
+  }
+
+  function openStickerBook() {
+    hideMenu();
+    sbGridEl.innerHTML = '';
+    for (const st of STICKERS) {
+      const earned = !!progress.stickers[st.id];
+      const card = document.createElement('div');
+      card.className = 'sb-card' + (earned ? ' earned' : '');
+      card.innerHTML = earned
+        ? `<img src="assets/${st.icon}.png" alt=""><span class="sb-name">${st.name}</span><span class="sb-hint">${st.hint}</span>`
+        : `<span class="sb-mystery">?</span><span class="sb-name">???</span><span class="sb-hint">${st.hint}</span>`;
+      sbGridEl.appendChild(card);
+    }
+    sbCountEl.textContent = `${stickerCount()} / ${STICKERS.length} collected`;
+    stickerBookEl.classList.remove('hidden');
   }
   function hideMenu() { menuEl.classList.add('hidden'); }
 
@@ -757,11 +888,12 @@
     scoreTotal += bonusScore;
     AudioFX.stopMusic();
     AudioFX.fanfare();
-    const isLast = levelIndex + 1 >= worldNow().levels.length;
+    if (toysCollected >= 8) awardSticker('toy_8');
+    const isLast = !endlessMode && levelIndex + 1 >= worldNow().levels.length;
     showOverlay(
       'Yard Cleanup complete!',
       `Toys collected: ${toysCollected} &nbsp;|&nbsp; +${bonusScore} pts`,
-      isLast ? 'See Results' : 'Next Level'
+      isLast ? 'See Results' : (endlessMode ? `On to Day ${endlessDay + 1}!` : 'Next Level')
     );
   }
 
@@ -780,6 +912,10 @@
         startBonusRound();
       }
     } else if (gameState === 'bonusComplete') {
+      if (endlessMode) {
+        startEndlessDay(endlessDay + 1);
+        return;
+      }
       const completedIdx = levelIndex;
       if (completedIdx + 1 < worldNow().levels.length) {
         startLevel(completedIdx + 1);
@@ -788,13 +924,19 @@
         showEnding();
       }
     } else if (gameState === 'gameOver') {
-      startLevel(levelIndex); // retry the same level from the start
+      if (endlessMode) {
+        endlessMode = false;
+        showMenu();
+      } else {
+        startLevel(levelIndex); // retry the same level from the start
+      }
     } else if (gameState === 'ending') {
       showMenu();
     }
   });
 
   function startRunAt(wIdx, lIdx) {
+    endlessMode = false;
     worldIndex = wIdx;
     hideMenu();
     levelSelectEl.classList.add('hidden');
@@ -895,6 +1037,12 @@
   });
   menuIntroBtn.addEventListener('click', startIntro);
   if (menuLevelsBtn) menuLevelsBtn.addEventListener('click', openLevelSelect);
+  if (menuEndlessBtn) menuEndlessBtn.addEventListener('click', startEndlessRun);
+  if (menuStickersBtn) menuStickersBtn.addEventListener('click', openStickerBook);
+  if (sbBackBtn) sbBackBtn.addEventListener('click', () => {
+    stickerBookEl.classList.add('hidden');
+    showMenu();
+  });
   if (lsBackBtn) lsBackBtn.addEventListener('click', () => {
     levelSelectEl.classList.add('hidden');
     showMenu();
@@ -916,6 +1064,7 @@
     // Unlock the next world if this one is now fully cleared.
     let unlockHtml = '';
     if (isWorldComplete(worldNow())) {
+      awardSticker('world_' + worldNow().id);
       const ni = worldIndex + 1;
       if (ni < WORLDS.length) {
         const next = WORLDS[ni];
@@ -924,6 +1073,8 @@
           saveProgress();
         }
         unlockHtml = `<br>\u{1F513} <strong>NEW LOCATION UNLOCKED: ${next.label}!</strong>`;
+      } else if (worldNow().id === 'school') {
+        unlockHtml = `<br>\u{267E}\u{FE0F} <strong>ENDLESS MODE UNLOCKED!</strong>`;
       }
     }
 
@@ -959,6 +1110,17 @@
     gameState = 'gameOver';
     AudioFX.stopMusic();
     AudioFX.accident();
+    if (endlessMode) {
+      const survived = endlessDay - 1;
+      if (survived > progress.endlessBest) { progress.endlessBest = survived; saveProgress(); }
+      showOverlay(
+        'The streak ends!',
+        `You survived ${survived} day${survived === 1 ? '' : 's'} of endless potty chaos.` +
+        `<br><small>Best streak: Day ${progress.endlessBest}</small>`,
+        'Back to Menu'
+      );
+      return;
+    }
     showOverlay(
       'Too many accidents!',
       `You ran out of hearts on ${level.label}. Give it another try — you've got this!`,
@@ -973,11 +1135,31 @@
     starsTotal += starsThisLevel;
     accidentsTotal += accidentsThisLevel;
     scoreTotal += scoreThisLevel;
+
+    if (accidentsThisLevel === 0) {
+      awardSticker('clean_level');
+      if (worldNow().twins) awardSticker('twin_tamer');
+    }
+
+    if (endlessMode) {
+      if (endlessDay > progress.endlessBest) { progress.endlessBest = endlessDay; saveProgress(); }
+      if (endlessDay >= 10) awardSticker('endless_10');
+      showOverlay(
+        `Day ${endlessDay} survived!`,
+        `Score: ${scoreThisLevel} pts &nbsp;|&nbsp; Accidents: ${accidentsThisLevel}` +
+        `<br><small>Best streak: Day ${progress.endlessBest}</small>`,
+        'Clean Up the Yard!'
+      );
+      return;
+    }
+
     // Rating: 1 = finished, 2 = no accidents, 3 = no accidents + trophy grabbed.
     const rating = 1
       + (accidentsThisLevel === 0 ? 1 : 0)
       + (accidentsThisLevel === 0 && trophyGrabbedThisLevel ? 1 : 0);
     recordStars(worldNow().id, levelIndex, rating);
+    if (rating === 3) awardSticker('three_star');
+    if (isWorldPerfect(worldNow())) awardSticker('star_student');
     showOverlay(
       `${level.label} complete!`,
       `<span class="rating-stars">${starString(rating)}</span><br>` +
@@ -1093,24 +1275,27 @@
   function speedEscalationMult() {
     return 1 + Math.floor(starsThisLevel / SPEED_ESCALATION_STEP) * SPEED_ESCALATION_MULT;
   }
-  function candyTurboMult() { return toddlerTurboTimer > 0 ? CANDY_TURBO_MULT : 1; }
-  function toddlerFleeSpeed() {
-    const base = level.fleeSpeed * speedEscalationMult() * candyTurboMult();
-    return toddler.alertType === 'poop' ? base * POOP_SPEED_MULT : base;
+  function candyTurboMult(t) { return t.turboTimer > 0 ? CANDY_TURBO_MULT : 1; }
+  function toddlerFleeSpeed(t) {
+    const base = level.fleeSpeed * speedEscalationMult() * candyTurboMult(t);
+    return t.alertType === 'poop' ? base * POOP_SPEED_MULT : base;
   }
-  function toddlerWanderSpeed() {
-    return level.wanderSpeed * speedEscalationMult() * candyTurboMult();
+  function toddlerWanderSpeed(t) {
+    return level.wanderSpeed * speedEscalationMult() * candyTurboMult(t);
   }
 
   // ---------- Candy turbo (Park onward) ----------
   function updateCandy(dt) {
-    if (toddlerTurboTimer > 0) {
-      toddlerTurboTimer -= dt;
-      toddlerTurboSparkTimer -= dt;
-      if (toddlerTurboSparkTimer <= 0) {
-        toddlerTurboSparkTimer = 0.12;
-        const tc = centerOf(toddler);
-        spawnBurst(tc.x, tc.y + 6, GOLD_SPARK, 2, 30);
+    // per-toddler sugar-rush timers + sparkle trails
+    for (const t of toddlers) {
+      if (t.turboTimer > 0) {
+        t.turboTimer -= dt;
+        t.sparkTimer -= dt;
+        if (t.sparkTimer <= 0) {
+          t.sparkTimer = 0.12;
+          const tc = centerOf(t);
+          spawnBurst(tc.x, tc.y + 6, GOLD_SPARK, 2, 30);
+        }
       }
     }
     if (!worldNow().candy) return;
@@ -1132,21 +1317,26 @@
       return;
     }
     // The race: whoever reaches the candy first wins it.
-    const tc = centerOf(toddler);
-    if (Math.hypot(tc.x - candyPickup.x, tc.y - candyPickup.y) < CANDY_RADIUS) {
-      candyPickup.active = false;
-      candyPickup.respawnIn = randRange(9, 14);
-      toddlerTurboTimer = CANDY_TURBO_TIME;
-      AudioFX.alert();
-      spawnBurst(candyPickup.x, candyPickup.y, GOLD_SPARK, 14, 70);
-      spawnFloatText(candyPickup.x, candyPickup.y - 18, 'SUGAR RUSH!', '#ff7ab5');
-      return;
+    for (const t of toddlers) {
+      const tc = centerOf(t);
+      if (Math.hypot(tc.x - candyPickup.x, tc.y - candyPickup.y) < CANDY_RADIUS) {
+        candyPickup.active = false;
+        candyPickup.respawnIn = randRange(9, 14);
+        t.turboTimer = CANDY_TURBO_TIME;
+        AudioFX.alert();
+        spawnBurst(candyPickup.x, candyPickup.y, GOLD_SPARK, 14, 70);
+        spawnFloatText(candyPickup.x, candyPickup.y - 18, 'SUGAR RUSH!', '#ff7ab5');
+        return;
+      }
     }
     const pc = centerOf(player);
     if (Math.hypot(pc.x - candyPickup.x, pc.y - candyPickup.y) < CANDY_RADIUS) {
       candyPickup.active = false;
       candyPickup.respawnIn = randRange(9, 14);
       scoreThisLevel += CANDY_PLAYER_POINTS;
+      progress.counters.candies++;
+      saveProgress();
+      if (progress.counters.candies >= 10) awardSticker('candy_10');
       AudioFX.powerup();
       spawnBurst(candyPickup.x, candyPickup.y, PUFF_WHITE, 10, 50);
       spawnFloatText(candyPickup.x, candyPickup.y - 18, `+${CANDY_PLAYER_POINTS}`, '#ff7ab5');
@@ -1174,6 +1364,9 @@
       trophy.active = false;
       trophyGrabbedThisLevel = true;
       scoreThisLevel += TROPHY_POINTS;
+      progress.counters.trophies++;
+      saveProgress();
+      if (progress.counters.trophies >= 5) awardSticker('trophy_5');
       AudioFX.powerup();
       spawnBurst(trophy.x, trophy.y, GOLD_SPARK, 16, 80);
       spawnFloatText(trophy.x, trophy.y - 18, `+${TROPHY_POINTS} \u{1F3C6}`, '#ffd23f');
@@ -1182,8 +1375,13 @@
   }
 
   function updateToddlerAI(dt) {
-    const t = toddler;
+    for (const t of toddlers) {
+      updateOneToddler(t, dt);
+      if (gameState !== 'playing') return; // game over / level end mid-loop
+    }
+  }
 
+  function updateOneToddler(t, dt) {
     if (!t.alertActive && gameState === 'playing') {
       t.nextAlertIn -= dt;
       if (t.nextAlertIn <= 0) {
@@ -1208,6 +1406,7 @@
         stains.push({ type: t.alertType, x: t.x, y: t.y });
         hearts = Math.max(0, hearts - 1);
         accidentsThisLevel++;
+        savesStreakThisLevel = 0;
         AudioFX.accident();
         shake(3, 0.35);
         spawnBurst(t.x + t.w / 2, t.y + t.h / 2, SAD_BLUE, 10, 50);
@@ -1227,6 +1426,7 @@
         t.state = 'following';
         AudioFX.catch();
         spawnBurst(tc.x, tc.y, PUFF_WHITE, 8, 40);
+        if (t.turboTimer > 0) awardSticker('turbo_tamer');
       } else {
         let vx = tc.x - pc.x, vy = tc.y - pc.y;
         const len = Math.hypot(vx, vy) || 1;
@@ -1243,7 +1443,7 @@
           const rx = vx * ca - vy * sa, ry = vx * sa + vy * ca;
           vx = rx; vy = ry;
         }
-        const fleeSpeed = toddlerFleeSpeed();
+        const fleeSpeed = toddlerFleeSpeed(t);
         const dx = vx * fleeSpeed * dt, dy = vy * fleeSpeed * dt;
         t.moving = true;
         if (Math.abs(dx) > Math.abs(dy)) t.facing = dx > 0 ? 'right' : 'left';
@@ -1265,7 +1465,7 @@
       if (t.moving) {
         // Match the big brother's current pace (turbo included), with a
         // small catch-up boost so the toddler snaps in tight instead of trailing.
-        const speed = Math.max(playerCurrentSpeed, toddlerFleeSpeed()) * 1.2;
+        const speed = Math.max(playerCurrentSpeed, toddlerFleeSpeed(t)) * 1.2;
         const step = Math.min(dist, speed * dt);
         const dx = (dx0 / dist) * step, dy = (dy0 / dist) * step;
         if (Math.abs(dx0) > Math.abs(dy0)) t.facing = dx0 > 0 ? 'right' : 'left';
@@ -1278,13 +1478,17 @@
         const tc = centerOf(t);
         if (Math.hypot(tc.x - sx, tc.y - sy) < POTTY_RADIUS) {
           starsThisLevel++;
+          savesStreakThisLevel++;
+          if (savesStreakThisLevel >= 5) awardSticker('combo_5');
           const isPoop = t.alertType === 'poop';
           if (isPoop) {
             poopSavedRun++;
             poopsFixedThisLevel = Math.min(POOP_QUOTA, poopsFixedThisLevel + 1);
+            awardSticker('first_poop');
           } else {
             peeSavedRun++;
             peesFixedThisLevel = Math.min(PEE_QUOTA, peesFixedThisLevel + 1);
+            awardSticker('first_pee');
           }
           const timeBonus = Math.round(Math.max(0, t.alertTimeRemaining) * TIME_BONUS_PER_SEC);
           const earned = (isPoop ? POOP_POINTS : PEE_POINTS) + timeBonus;
@@ -1322,7 +1526,7 @@
         t.stuckTimer = 0;
         t.moving = false;
       } else {
-        const step = Math.min(dist, toddlerWanderSpeed() * dt);
+        const step = Math.min(dist, toddlerWanderSpeed(t) * dt);
         const dx = (dx0 / dist) * step, dy = (dy0 / dist) * step;
         t.moving = true;
         if (Math.abs(dx0) > Math.abs(dy0)) t.facing = dx0 > 0 ? 'right' : 'left';
@@ -1617,11 +1821,12 @@
   }
 
   function drawAlertIcon() {
-    const t = toddler;
-    if (!t.alertActive) return;
-    const icon = t.alertType === 'pee' ? images.icon_pee : images.icon_poop;
-    const bob = Math.sin(performance.now() / 180) * 3;
-    ctx.drawImage(icon, t.x + t.w / 2 - 8, t.y - 20 + bob, 16, 16);
+    for (const t of toddlers) {
+      if (!t.alertActive) continue;
+      const icon = t.alertType === 'pee' ? images.icon_pee : images.icon_poop;
+      const bob = Math.sin(performance.now() / 180) * 3;
+      ctx.drawImage(icon, t.x + t.w / 2 - 8, t.y - 20 + bob, 16, 16);
+    }
   }
 
   function draw() {
@@ -1654,12 +1859,21 @@
       });
     }
     drawables.push({ custom: 'player', sortY: player.y + player.h });
-    drawables.push({ custom: 'toddler', sortY: toddler.y + toddler.h });
+    toddlers.forEach((t) => {
+      drawables.push({ custom: 'toddler', toddlerRef: t, sortY: t.y + t.h });
+    });
 
     drawables.sort((a, b) => a.sortY - b.sortY);
     for (const d of drawables) {
       if (d.custom === 'player') drawCharacter(player, 'big');
-      else if (d.custom === 'toddler') drawCharacter(toddler, 'little');
+      else if (d.custom === 'toddler') {
+        drawCharacter(d.toddlerRef, 'little');
+        if (d.toddlerRef.isTwin) {
+          // little green cap band so you can tell the twins apart
+          ctx.fillStyle = '#3fae5a';
+          ctx.fillRect(d.toddlerRef.x + 7, d.toddlerRef.y + 3, 10, 3);
+        }
+      }
       else ctx.drawImage(d.img, d.x, d.y);
     }
 

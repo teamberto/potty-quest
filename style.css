@@ -674,6 +674,119 @@ canvas#game {
   text-shadow: 0 2px 8px rgba(255,196,0,0.4);
 }
 
+/* ---- Sticker book ---- */
+#sticker-book {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: rgba(10,11,16,0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+#sticker-book.hidden { display: none; }
+#sb-box {
+  width: 100%;
+  max-width: 480px;
+  max-height: 92vh;
+  overflow-y: auto;
+  color: #fff;
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+#sb-box h1 {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: linear-gradient(180deg, #ffe27a, #ff9d00);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+#sb-count { font-size: 13px; color: #ffe27a; }
+#sb-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.sb-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 92px;
+}
+.sb-card.earned {
+  background: rgba(255,196,0,0.12);
+  border-color: rgba(255,196,0,0.5);
+}
+.sb-card img {
+  width: 30px;
+  height: 30px;
+  image-rendering: pixelated;
+}
+.sb-mystery {
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+  font-size: 22px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.35);
+}
+.sb-name { font-size: 11.5px; font-weight: 800; }
+.sb-hint { font-size: 10px; line-height: 1.25; color: #b9bcc7; }
+#sb-back {
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 800;
+  border-radius: 26px;
+  border: none;
+  background: #ffc400;
+  color: #1a1a1a;
+  -webkit-tap-highlight-color: transparent;
+}
+#sb-back:active { transform: scale(0.96); }
+
+/* ---- Sticker toast ---- */
+#sticker-toast {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(20,22,30,0.96);
+  border: 1px solid rgba(255,196,0,0.6);
+  border-radius: 14px;
+  padding: 10px 16px;
+  color: #fff;
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  line-height: 1.3;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  transition: top 0.35s ease;
+  pointer-events: none;
+}
+#sticker-toast.show { top: max(14px, env(safe-area-inset-top)); }
+#sticker-toast img {
+  width: 28px;
+  height: 28px;
+  image-rendering: pixelated;
+}
+#sticker-toast strong { color: #ffe27a; }
+
 #parent-gate {
   position: absolute;
   inset: 0;
