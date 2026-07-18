@@ -439,7 +439,11 @@
   const FOLLOW_OFFSET = 14; // how far behind the big brother the toddler tucks in
   const SPEED_ESCALATION_STEP = 3;   // every N successful saves this level...
   const SPEED_ESCALATION_MULT = 0.08; // ...the toddler gets this much faster (cumulative)
-  const POOP_SPEED_MULT = 1.18;       // poop alerts flee faster than pee alerts (worth more points)
+  const POOP_SPEED_MULT = 1.35;       // poop alerts flee faster than pee alerts (harder to catch)
+  const POOP_EXTRA_TIME = 5;          // poop alerts give this many more seconds than pee (offsets the harder chase)
+  const POOP_JUKE_MAX_ANGLE = 1.2;    // radians (~69°): how sharply a poop-toddler can dart sideways to juke you
+  const POOP_JUKE_MIN_INTERVAL = 0.4; // seconds between juke direction changes (min)
+  const POOP_JUKE_MAX_INTERVAL = 0.9; // seconds between juke direction changes (max)
 
   const PEE_POINTS = 100;
   const POOP_POINTS = 160;
@@ -523,7 +527,7 @@
     x: 0, y: 0, w: SPRITE_SIZE, h: SPRITE_SIZE, facing: 'down', moving: false, animFrame: 0,
     state: 'wander', wanderTarget: null, stuckTimer: 0,
     alertActive: false, alertType: null, alertTimeRemaining: 0, nextAlertIn: 0,
-    relieveTimer: 0,
+    relieveTimer: 0, jukeTimer: 0, jukeAngle: 0,
   };
   let playerCurrentSpeed = 0;
 
@@ -981,7 +985,9 @@
       if (t.nextAlertIn <= 0) {
         t.alertActive = true;
         t.alertType = Math.random() < 0.55 ? 'pee' : 'poop';
-        t.alertTimeRemaining = level.alertTimeLimit;
+        t.alertTimeRemaining = level.alertTimeLimit + (t.alertType === 'poop' ? POOP_EXTRA_TIME : 0);
+        t.jukeTimer = 0;
+        t.jukeAngle = 0;
         t.state = 'fleeing';
         AudioFX.alert();
         alertCount++;
@@ -1021,6 +1027,18 @@
         let vx = tc.x - pc.x, vy = tc.y - pc.y;
         const len = Math.hypot(vx, vy) || 1;
         vx /= len; vy /= len;
+        // Poop jukes: every so often the toddler darts sideways off the straight
+        // "run away" line to shake you off. Pee-toddlers run straight (angle 0).
+        if (t.alertType === 'poop') {
+          t.jukeTimer -= dt;
+          if (t.jukeTimer <= 0) {
+            t.jukeTimer = randRange(POOP_JUKE_MIN_INTERVAL, POOP_JUKE_MAX_INTERVAL);
+            t.jukeAngle = (Math.random() * 2 - 1) * POOP_JUKE_MAX_ANGLE;
+          }
+          const ca = Math.cos(t.jukeAngle), sa = Math.sin(t.jukeAngle);
+          const rx = vx * ca - vy * sa, ry = vx * sa + vy * ca;
+          vx = rx; vy = ry;
+        }
         const fleeSpeed = toddlerFleeSpeed();
         const dx = vx * fleeSpeed * dt, dy = vy * fleeSpeed * dt;
         t.moving = true;
