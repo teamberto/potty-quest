@@ -16,8 +16,11 @@
   const menuEl = document.getElementById('menu');
   const menuStartBtn = document.getElementById('menu-start');
   const menuIntroBtn = document.getElementById('menu-intro');
+  const menuHowToPlayBtn = document.getElementById('menu-howtoplay');
   const menuHighscoreEl = document.getElementById('menu-highscore');
   const pauseBtn = document.getElementById('btn-pause');
+  const howToPlayEl = document.getElementById('howtoplay');
+  const htpStartBtn = document.getElementById('htp-start');
 
   // ---------- Asset loading ----------
   const SPRITE_NAMES = [
@@ -79,10 +82,6 @@
     el.addEventListener('mouseup', up);
     el.addEventListener('mouseleave', up);
   }
-  bindHold(document.getElementById('btn-up'), 'up');
-  bindHold(document.getElementById('btn-down'), 'down');
-  bindHold(document.getElementById('btn-left'), 'left');
-  bindHold(document.getElementById('btn-right'), 'right');
   bindHold(document.getElementById('btn-turbo'), 'turbo');
   window.addEventListener('keydown', (e) => {
     if (e.code === 'ArrowUp' || e.code === 'KeyW') input.up = true;
@@ -103,17 +102,26 @@
     if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.turbo = false;
   });
 
-  // ---------- Touch swipe steering (iPad/phones: no d-pad, just swipe) ----------
-  const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  if (IS_TOUCH) {
-    const dpadEl = document.getElementById('controls');
-    if (dpadEl) dpadEl.style.display = 'none';
+  // ---------- Virtual joystick (bottom-left circular stick, touch + mouse) ----------
+  (function initJoystick() {
+    const base = document.getElementById('joystick-base');
+    const knob = document.getElementById('joystick-knob');
+    if (!base || !knob) return;
 
-    const swipe = { active: false, id: null, ax: 0, ay: 0 };
-    const DEADZONE = 14;      // px before a drag counts as a direction
-    const ANCHOR_DIST = 42;   // anchor trails the finger so reversals are instant
+    const MAX_RADIUS = 46;  // px the knob can travel from center
+    const DEADZONE = 10;    // px before a direction registers
+    let pointerId = null;   // null = mouse drag, otherwise a touch identifier
 
-    function steer(dx, dy) {
+    function baseCenter() {
+      const r = base.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+
+    function setKnob(dx, dy) {
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+
+    function updateDirection(dx, dy) {
       input.up = input.down = input.left = input.right = false;
       if (Math.hypot(dx, dy) < DEADZONE) return;
       if (Math.abs(dx) > 0.5 * Math.abs(dy)) {
@@ -124,47 +132,64 @@
       }
     }
 
-    canvas.addEventListener('touchstart', (e) => {
-      if (!swipe.active) {
-        const t = e.changedTouches[0];
-        swipe.active = true;
-        swipe.id = t.identifier;
-        swipe.ax = t.clientX;
-        swipe.ay = t.clientY;
+    function move(x, y) {
+      const c = baseCenter();
+      let dx = x - c.x, dy = y - c.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > MAX_RADIUS) {
+        const k = MAX_RADIUS / dist;
+        dx *= k; dy *= k;
       }
+      setKnob(dx, dy);
+      updateDirection(dx, dy);
+    }
+
+    function release() {
+      pointerId = null;
+      base.classList.remove('active');
+      setKnob(0, 0);
+      input.up = input.down = input.left = input.right = false;
+    }
+
+    base.addEventListener('touchstart', (e) => {
       e.preventDefault();
+      const t = e.changedTouches[0];
+      pointerId = t.identifier;
+      base.classList.add('active');
+      move(t.clientX, t.clientY);
     }, { passive: false });
 
-    canvas.addEventListener('touchmove', (e) => {
-      if (swipe.active) {
-        for (const t of e.changedTouches) {
-          if (t.identifier !== swipe.id) continue;
-          let dx = t.clientX - swipe.ax, dy = t.clientY - swipe.ay;
-          const len = Math.hypot(dx, dy);
-          if (len > ANCHOR_DIST) {
-            const k = (len - ANCHOR_DIST) / len;
-            swipe.ax += dx * k;
-            swipe.ay += dy * k;
-            dx = t.clientX - swipe.ax;
-            dy = t.clientY - swipe.ay;
-          }
-          steer(dx, dy);
-        }
-      }
-      e.preventDefault();
-    }, { passive: false });
-
-    const endSwipe = (e) => {
+    base.addEventListener('touchmove', (e) => {
+      if (pointerId === null) return;
       for (const t of e.changedTouches) {
-        if (t.identifier !== swipe.id) continue;
-        swipe.active = false;
-        swipe.id = null;
-        input.up = input.down = input.left = input.right = false;
+        if (t.identifier !== pointerId) continue;
+        move(t.clientX, t.clientY);
+      }
+      e.preventDefault();
+    }, { passive: false });
+
+    const touchEnd = (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === pointerId) release();
       }
     };
-    canvas.addEventListener('touchend', endSwipe);
-    canvas.addEventListener('touchcancel', endSwipe);
-  }
+    base.addEventListener('touchend', touchEnd);
+    base.addEventListener('touchcancel', touchEnd);
+
+    base.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      base.classList.add('active');
+      move(e.clientX, e.clientY);
+      const onMove = (e2) => move(e2.clientX, e2.clientY);
+      const onUp = () => {
+        release();
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+  })();
 
   // ---------- Sound (WebAudio synth, no asset files) ----------
   const AudioFX = (() => {
@@ -448,6 +473,12 @@
   function saveBest(b) {
     try { localStorage.setItem('pottychamp_best', JSON.stringify(b)); } catch (e) {}
   }
+  function hasSeenTutorial() {
+    try { return localStorage.getItem('pottychamp_seen_tutorial') === '1'; } catch (e) { return false; }
+  }
+  function markTutorialSeen() {
+    try { localStorage.setItem('pottychamp_seen_tutorial', '1'); } catch (e) {}
+  }
   const TURBO_MAX = 5;      // seconds of turbo in a full power bar
   const TURBO_MULT = 1.6;
   let turboMeter = TURBO_MAX;
@@ -669,8 +700,9 @@
     } else if (gameState === 'levelComplete') {
       startBonusRound();
     } else if (gameState === 'bonusComplete') {
-      if (levelIndex + 1 < LEVELS.length) {
-        startLevel(levelIndex + 1);
+      const completedIdx = levelIndex;
+      if (completedIdx + 1 < LEVELS.length) {
+        startLevel(completedIdx + 1);
       } else {
         gameState = 'ending';
         showEnding();
@@ -680,7 +712,7 @@
     }
   });
 
-  menuStartBtn.addEventListener('click', () => {
+  function beginRun() {
     hideMenu();
     starsTotal = 0;
     accidentsTotal = 0;
@@ -688,6 +720,32 @@
     peeSavedRun = 0;
     poopSavedRun = 0;
     startLevel(0);
+  }
+  let tutorialOpenedFromMenu = false;
+  menuStartBtn.addEventListener('click', () => {
+    if (!hasSeenTutorial()) {
+      tutorialOpenedFromMenu = false;
+      htpStartBtn.textContent = '▶ Let\'s Go!';
+      hideMenu();
+      howToPlayEl.classList.remove('hidden');
+    } else {
+      beginRun();
+    }
+  });
+  menuHowToPlayBtn.addEventListener('click', () => {
+    tutorialOpenedFromMenu = true;
+    htpStartBtn.textContent = '◀ Back to Menu';
+    hideMenu();
+    howToPlayEl.classList.remove('hidden');
+  });
+  htpStartBtn.addEventListener('click', () => {
+    markTutorialSeen();
+    howToPlayEl.classList.add('hidden');
+    if (tutorialOpenedFromMenu) {
+      showMenu();
+    } else {
+      beginRun();
+    }
   });
   menuIntroBtn.addEventListener('click', startIntro);
   pauseBtn.addEventListener('click', togglePause);
@@ -1377,6 +1435,9 @@
 
     requestAnimationFrame(loop);
   }
+
+  // Potty Champ ships completely free — no ads, no in-app purchases, no
+  // tracking. Monetization can be added back in a future update.
 
   resize();
   loadAssets(() => {

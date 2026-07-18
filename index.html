@@ -36,18 +36,7 @@
     <button id="menu-start">&#9654; Start Play</button>
     <div id="menu-highscore">&nbsp;</div>
     <button id="menu-intro">&#9654; Replay Intro</button>
-    <div id="menu-instructions">
-      <h2>How to Play</h2>
-      <p>Swipe anywhere to run (arrow keys or WASD on a computer). When an alert pops up over your little brother, touch him so he follows you, then lead him to the potty before the time runs out!</p>
-      <div class="instr"><img src="assets/icon_pee.png"><span>Pee alert &mdash; he needs to go, fast!</span></div>
-      <div class="instr"><img src="assets/icon_poop.png"><span>Poop alert &mdash; code brown, even faster!</span></div>
-      <div class="instr"><img src="assets/potty.png"><span>The potty &mdash; get him here in time to score.</span></div>
-      <div class="instr"><img src="assets/icon_star.png"><span>Stars &mdash; every save counts toward your high score.</span></div>
-      <div class="instr"><img src="assets/heart_full.png"><span>Hearts &mdash; you lose one for every accident.</span></div>
-      <div class="instr"><img src="assets/mop.png"><span>Mop &mdash; grab it from the bathroom, then stand on a mess to clean it up and win a heart back.</span></div>
-      <div class="instr"><img src="assets/turbo_shoe.png"><span>Turbo &mdash; hold the shoe button (or Shift) to sprint; grab glowing shoes to refill the power bar.</span></div>
-      <div class="instr"><span>&#9208;</span><span>Pause &mdash; tap the pause button (or press P) any time.</span></div>
-    </div>
+    <button id="menu-howtoplay">&#10067; How to Play</button>
   </div>
 
   <div id="overlay">
@@ -56,12 +45,36 @@
     <button id="overlay-button">Tap to Begin</button>
   </div>
 
+  <div id="howtoplay" class="hidden">
+    <div id="htp-box">
+      <h1>How to Play</h1>
+      <div id="htp-demo">
+        <div class="htp-control">
+          <div id="htp-joystick-base"><div id="htp-joystick-knob"></div></div>
+          <span class="htp-arrow">&#8599;</span>
+          <span class="htp-label">Drag to move</span>
+        </div>
+        <div class="htp-control">
+          <div id="htp-turbo-btn"><img src="assets/turbo_shoe.png" alt=""></div>
+          <span class="htp-arrow">&#8598;</span>
+          <span class="htp-label">Hold to sprint</span>
+        </div>
+      </div>
+      <div id="htp-grid">
+        <div class="htp-item"><img src="assets/icon_pee.png"><span>Pee alert &mdash; he needs to go, fast!</span></div>
+        <div class="htp-item"><img src="assets/icon_poop.png"><span>Poop alert &mdash; code brown, even faster!</span></div>
+        <div class="htp-item"><img src="assets/potty.png"><span>Get him to the potty in time to score.</span></div>
+        <div class="htp-item"><img src="assets/heart_full.png"><span>Hearts &mdash; lose one for every accident.</span></div>
+        <div class="htp-item"><img src="assets/mop.png"><span>Mop up messes to win a heart back.</span></div>
+        <div class="htp-item"><img src="assets/icon_star.png"><span>Stars &mdash; every save boosts your score.</span></div>
+      </div>
+      <button id="htp-start">&#9654; Let's Go!</button>
+    </div>
+  </div>
+
   <div id="controls">
-    <div class="dpad">
-      <button id="btn-up" class="ctrl-btn dpad-up" aria-label="Move up">&#8593;</button>
-      <button id="btn-left" class="ctrl-btn dpad-left" aria-label="Move left">&#8592;</button>
-      <button id="btn-right" class="ctrl-btn dpad-right" aria-label="Move right">&#8594;</button>
-      <button id="btn-down" class="ctrl-btn dpad-down" aria-label="Move down">&#8595;</button>
+    <div id="joystick-base" aria-label="Move">
+      <div id="joystick-knob"></div>
     </div>
   </div>
 
