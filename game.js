@@ -32,6 +32,7 @@
   const menuEndlessBtn = document.getElementById('menu-endless');
   const menuDashBtn = document.getElementById('menu-dash');
   const menuMayhemBtn = document.getElementById('menu-mayhem');
+  const menuDailyBtn = document.getElementById('menu-daily');
   const menuStickersBtn = document.getElementById('menu-stickers');
   const stickerBookEl = document.getElementById('sticker-book');
   const sbGridEl = document.getElementById('sb-grid');
@@ -326,6 +327,11 @@
       scrub() { noise(0.07, { vol: 0.05 }); },
       clean() { tone(784, 0.1, { type: 'triangle', vol: 0.13 }); tone(1175, 0.14, { type: 'triangle', vol: 0.13, delay: 0.08 }); },
       powerup() { [440, 660, 880].forEach((f, i) => tone(f, 0.08, { vol: 0.12, delay: i * 0.06 })); },
+      // combo jingle: pitch climbs with the streak — each save sounds bigger
+      combo(n) {
+        const base = 440 + Math.min(6, n) * 70;
+        [base, base * 1.25, base * 1.5].forEach((f, i) => tone(f, 0.09, { type: 'square', vol: 0.09, delay: i * 0.05 }));
+      },
     };
   })();
   window.addEventListener('pointerdown', () => AudioFX.unlock());
@@ -518,6 +524,41 @@
   let introSavedBurst = false;
   let introTitleBurst = false;
   let introSparkTimer = 0;
+
+  // ---------- Juice: combo banners + clutch slow-mo ----------
+  let bannerText = '';
+  let bannerColor = '#ffd23f';
+  let bannerTimer = 0;
+  const BANNER_DUR = 1.3;
+  let slowmoTimer = 0;
+
+  function showBanner(text, color) {
+    bannerText = text;
+    bannerColor = color || '#ffd23f';
+    bannerTimer = BANNER_DUR;
+  }
+
+  function drawBanner() {
+    if (bannerTimer <= 0) return;
+    const shown = BANNER_DUR - bannerTimer;
+    const s = shown < 0.35 ? easeOutBack(shown / 0.35) : 1;
+    const alpha = bannerTimer < 0.3 ? bannerTimer / 0.3 : 1;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.translate(WORLD_W / 2, 64);
+    ctx.scale(s, s);
+    ctx.font = '900 26px -apple-system, "Helvetica Neue", sans-serif';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(10,8,4,0.9)';
+    ctx.strokeText(bannerText, 0, 0);
+    ctx.fillStyle = bannerColor;
+    ctx.fillText(bannerText, 0, 0);
+    ctx.restore();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
   let peeSavedRun = 0;
   let poopSavedRun = 0;
 
@@ -556,9 +597,11 @@
       p.endlessBest = p.endlessBest || 0;
       p.dashBest = p.dashBest || 0;
       p.mayhemBest = p.mayhemBest || 0;
+      p.dailyDone = p.dailyDone || '';
+      p.dailyTotal = p.dailyTotal || 0;
       return p;
     } catch (e) {
-      return { stars: {}, unlocked: { home: true }, stickers: {}, counters: { trophies: 0, candies: 0 }, endlessBest: 0, dashBest: 0, mayhemBest: 0 };
+      return { stars: {}, unlocked: { home: true }, stickers: {}, counters: { trophies: 0, candies: 0 }, endlessBest: 0, dashBest: 0, mayhemBest: 0, dailyDone: '', dailyTotal: 0 };
     }
   }
   const progress = loadProgress();
@@ -598,7 +641,37 @@
     { id: 'endless_10', name: 'Marathon Champ', icon: 'cake_whole', hint: 'Reach Day 10 in Endless Mode.' },
     { id: 'dash_500', name: 'Road Runner', icon: 'little_up_0', hint: 'Dash 500 m in Potty Dash.' },
     { id: 'mayhem_15', name: 'Crowd Control', icon: 'little_down_0', hint: 'Save 15 kids in one Potty Mayhem.' },
+    { id: 'daily_7', name: 'Golden Week', icon: 'cookie', hint: 'Complete 7 Daily Challenges.' },
   ];
+
+  // ---------- Daily Challenge (a fresh gift goal every day — no guilt streaks) ----------
+  const DAILY_TYPES = [
+    { id: 'dash', desc: 'Dash 300 m in Potty Dash' },
+    { id: 'mayhem', desc: 'Save 10 kids in Potty Mayhem' },
+    { id: 'clean', desc: 'Finish a Story level with 0 accidents' },
+  ];
+  function todayKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  }
+  function dailyTypeToday() {
+    const dayIdx = Math.floor(new Date().setHours(0, 0, 0, 0) / 86400000);
+    return DAILY_TYPES[dayIdx % DAILY_TYPES.length];
+  }
+  function isDailyDone() { return progress.dailyDone === todayKey(); }
+  function completeDaily(kind) {
+    if (dailyTypeToday().id !== kind || isDailyDone()) return;
+    progress.dailyDone = todayKey();
+    progress.dailyTotal++;
+    saveProgress();
+    toastQueue.push({
+      icon: 'cookie',
+      title: 'Daily Challenge complete! \u{1F381}',
+      body: `${progress.dailyTotal} gift day${progress.dailyTotal === 1 ? '' : 's'} collected`,
+    });
+    showNextToast();
+    if (progress.dailyTotal >= 7) awardSticker('daily_7');
+  }
   function stickerCount() { return STICKERS.filter((s) => progress.stickers[s.id]).length; }
 
   const toastQueue = [];
@@ -608,7 +681,7 @@
     const st = toastQueue.shift();
     toastShowing = true;
     stickerToastEl.innerHTML =
-      `<img src="assets/${st.icon}.png" alt=""><div><strong>Sticker earned!</strong><br>${st.name}</div>`;
+      `<img src="assets/${st.icon}.png" alt=""><div><strong>${st.title || 'Sticker earned!'}</strong><br>${st.body || st.name}</div>`;
     stickerToastEl.classList.add('show');
     setTimeout(() => {
       stickerToastEl.classList.remove('show');
@@ -849,6 +922,11 @@
         ? `\u{1F579} Potty Mayhem — Best: ${progress.mayhemBest} pts`
         : '\u{1F579} Potty Mayhem';
     }
+    if (menuDailyBtn) {
+      menuDailyBtn.innerHTML = isDailyDone()
+        ? `\u{2705} Daily done! ${progress.dailyTotal} \u{1F381} — back tomorrow!`
+        : `\u{1F3AF} Daily: ${dailyTypeToday().desc}`;
+    }
     if (menuStickersBtn) {
       menuStickersBtn.innerHTML = `\u{1F4D6} Sticker Book (${stickerCount()}/${STICKERS.length})`;
     }
@@ -1015,6 +1093,7 @@
     heartsEl.style.display = '';
     if (scoreThisLevel > progress.mayhemBest) { progress.mayhemBest = scoreThisLevel; saveProgress(); }
     if (mayhemSaves >= 15) awardSticker('mayhem_15');
+    if (mayhemSaves >= 10) completeDaily('mayhem');
     showOverlay(
       'MAYHEM over!',
       `Kids saved: <strong>${mayhemSaves}</strong> &nbsp;|&nbsp; Score: ${scoreThisLevel} pts` +
@@ -1102,6 +1181,7 @@
     const m = dashMeters();
     if (m > progress.dashBest) { progress.dashBest = m; saveProgress(); }
     if (m >= DASH_STICKER_M) awardSticker('dash_500');
+    if (m >= 300) completeDaily('dash');
     showOverlay(
       'Ouch! Too many boo-boos!',
       `You dashed <strong>${m} m</strong> and scored ${dashScore} pts.` +
@@ -1419,6 +1499,12 @@
   if (menuEndlessBtn) menuEndlessBtn.addEventListener('click', startEndlessRun);
   if (menuDashBtn) menuDashBtn.addEventListener('click', startDash);
   if (menuMayhemBtn) menuMayhemBtn.addEventListener('click', startMayhem);
+  if (menuDailyBtn) menuDailyBtn.addEventListener('click', () => {
+    const ty = dailyTypeToday().id;
+    if (ty === 'dash') startDash();
+    else if (ty === 'mayhem') startMayhem();
+    else beginRun();
+  });
   if (menuStickersBtn) menuStickersBtn.addEventListener('click', openStickerBook);
   if (sbBackBtn) sbBackBtn.addEventListener('click', () => {
     stickerBookEl.classList.add('hidden');
@@ -1541,6 +1627,7 @@
     recordStars(worldNow().id, levelIndex, rating);
     if (rating === 3) awardSticker('three_star');
     if (isWorldPerfect(worldNow())) awardSticker('star_student');
+    if (accidentsThisLevel === 0) completeDaily('clean');
     showOverlay(
       `${level.label} complete!`,
       `<span class="rating-stars">${starString(rating)}</span><br>` +
@@ -1894,6 +1981,21 @@
           const timeBonus = Math.round(Math.max(0, t.alertTimeRemaining) * TIME_BONUS_PER_SEC);
           const earned = (isPoop ? POOP_POINTS : PEE_POINTS) + timeBonus;
           scoreThisLevel += earned;
+          // Juice: clutch saves get slow-mo, streaks get escalating call-outs.
+          if (t.alertTimeRemaining < 1) {
+            slowmoTimer = 0.55;
+            scoreThisLevel += 50;
+            showBanner('JUST IN TIME! +50', '#ffffff');
+            spawnFloatText(sx, sy - 34, 'CLUTCH!', '#ffffff');
+            AudioFX.combo(6);
+          } else if (savesStreakThisLevel >= 2) {
+            const n = savesStreakThisLevel;
+            showBanner(
+              n >= 8 ? 'POTTY LEGEND! \u{1F451}' : n >= 5 ? 'ON FIRE! \u{1F525}' : `${n} IN A ROW!`,
+              n >= 5 ? '#ff9d3f' : '#ffd23f'
+            );
+            AudioFX.combo(n);
+          }
           t.alertActive = false;
           t.state = 'relieved';
           t.relieveTimer = 1.0;
@@ -2371,6 +2473,12 @@
     drawParticles();
     drawFloatingTexts();
     drawAlertIcon();
+    drawBanner();
+    // white flash during clutch slow-mo
+    if (slowmoTimer > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${(slowmoTimer * 0.45).toFixed(3)})`;
+      ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    }
   }
 
   function drawBonusRound() {
@@ -2412,6 +2520,13 @@
     let dt = (ts - lastTime) / 1000;
     dt = Math.min(dt, 1 / 30);
     lastTime = ts;
+
+    // clutch slow-mo: the world crawls for a beat after a last-second save
+    if (slowmoTimer > 0) {
+      slowmoTimer -= dt;
+      dt *= 0.3;
+    }
+    if (bannerTimer > 0) bannerTimer -= dt;
 
     update(dt);
 
