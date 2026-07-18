@@ -447,10 +447,17 @@
   const TROPHY_POINTS = 300;
   const TOY_POINTS = 60;           // bonus round, per toy delivered
 
+  // Level goal: rescue this many of each before the level is complete. No timer
+  // — you finish by hitting the quota, and it's game over if you run out of hearts.
+  const PEE_QUOTA = 6;
+  const POOP_QUOTA = 7;
+
   let levelIndex = 0;
   let level = LEVELS[0];
   let timeRemaining = 0;
   let starsThisLevel = 0;
+  let peesFixedThisLevel = 0;
+  let poopsFixedThisLevel = 0;
   let starsTotal = 0;
   let accidentsThisLevel = 0;
   let accidentsTotal = 0;
@@ -561,6 +568,8 @@
     level = LEVELS[idx];
     timeRemaining = level.duration;
     starsThisLevel = 0;
+    peesFixedThisLevel = 0;
+    poopsFixedThisLevel = 0;
     accidentsThisLevel = 0;
     scoreThisLevel = 0;
     trophy.active = false;
@@ -603,9 +612,8 @@
   function hideOverlay() { overlay.classList.add('hidden'); }
 
   function updateHud() {
-    const m = Math.floor(Math.max(0, timeRemaining) / 60);
-    const s = Math.floor(Math.max(0, timeRemaining) % 60);
-    timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+    // Goal progress replaces the old countdown clock.
+    timerEl.textContent = `\u{1F4A7} ${peesFixedThisLevel}/${PEE_QUOTA}  \u{1F4A9} ${poopsFixedThisLevel}/${POOP_QUOTA}`;
     starsEl.textContent = `★ ${starsThisLevel}`;
     scoreEl.textContent = `${scoreThisLevel} pts`;
     heartImgs.forEach((img, i) => {
@@ -722,6 +730,8 @@
         gameState = 'ending';
         showEnding();
       }
+    } else if (gameState === 'gameOver') {
+      startLevel(levelIndex); // retry the same level from the start
     } else if (gameState === 'ending') {
       showMenu();
     }
@@ -796,6 +806,17 @@
         'Back to Menu'
       );
     }
+  }
+
+  function gameOver() {
+    gameState = 'gameOver';
+    AudioFX.stopMusic();
+    AudioFX.accident();
+    showOverlay(
+      'Too many accidents!',
+      `You ran out of hearts on ${level.label}. Give it another try — you've got this!`,
+      'Try Again'
+    );
   }
 
   function endLevel() {
@@ -985,6 +1006,7 @@
         t.wanderTarget = pickRandomRoomPoint(level.rooms);
         t.nextAlertIn = randRange(level.alertMin, level.alertMax);
         updateHud();
+        if (hearts <= 0) { gameOver(); return; }
       }
     }
 
@@ -1035,7 +1057,13 @@
         if (Math.hypot(tc.x - sx, tc.y - sy) < POTTY_RADIUS) {
           starsThisLevel++;
           const isPoop = t.alertType === 'poop';
-          if (isPoop) poopSavedRun++; else peeSavedRun++;
+          if (isPoop) {
+            poopSavedRun++;
+            poopsFixedThisLevel = Math.min(POOP_QUOTA, poopsFixedThisLevel + 1);
+          } else {
+            peeSavedRun++;
+            peesFixedThisLevel = Math.min(PEE_QUOTA, peesFixedThisLevel + 1);
+          }
           const timeBonus = Math.round(Math.max(0, t.alertTimeRemaining) * TIME_BONUS_PER_SEC);
           const earned = (isPoop ? POOP_POINTS : PEE_POINTS) + timeBonus;
           scoreThisLevel += earned;
@@ -1047,6 +1075,10 @@
           spawnFloatText(sx, sy - 18, `+${earned}`, isPoop ? '#ffb37a' : '#ffe27a');
           t.nextAlertIn = randRange(level.alertMin, level.alertMax);
           updateHud();
+          // Level is complete once both goals are met.
+          if (peesFixedThisLevel >= PEE_QUOTA && poopsFixedThisLevel >= POOP_QUOTA) {
+            endLevel();
+          }
           break;
         }
       }
@@ -1251,11 +1283,6 @@
     updateParticles(dt);
     updateFloatingTexts(dt);
 
-    timeRemaining -= dt;
-    if (timeRemaining <= 0) {
-      timeRemaining = 0;
-      endLevel();
-    }
     updateHud();
   }
 

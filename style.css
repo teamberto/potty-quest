@@ -55,6 +55,10 @@ canvas#game {
   color: #ffe27a;
 }
 
+#timer {
+  font-size: 18px;
+}
+
 #hearts {
   position: absolute;
   top: max(52px, calc(env(safe-area-inset-top) + 38px));
