@@ -571,6 +571,109 @@ canvas#game {
 }
 #bonus-howto-start:active { transform: scale(0.96); }
 
+/* ---- World / level select ---- */
+#level-select {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: rgba(10,11,16,0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+#level-select.hidden { display: none; }
+#ls-box {
+  width: 100%;
+  max-width: 460px;
+  max-height: 92vh;
+  overflow-y: auto;
+  color: #fff;
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+#ls-box h1 {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: linear-gradient(180deg, #ffe27a, #ff9d00);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+#ls-worlds {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.ls-world {
+  padding: 9px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  -webkit-tap-highlight-color: transparent;
+}
+.ls-world.active {
+  background: #ffc400;
+  border-color: #ffc400;
+  color: #1a1a1a;
+}
+.ls-world.locked { opacity: 0.45; }
+#ls-levels {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ls-level {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  -webkit-tap-highlight-color: transparent;
+}
+.ls-level .ls-num { font-size: 22px; font-weight: 900; }
+.ls-level .ls-stars { font-size: 12px; color: #ffe27a; letter-spacing: 1px; }
+.ls-level.locked { opacity: 0.4; }
+#ls-hint {
+  min-height: 18px;
+  font-size: 13px;
+  color: #ffe27a;
+}
+#ls-back {
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 800;
+  border-radius: 26px;
+  border: none;
+  background: #ffc400;
+  color: #1a1a1a;
+  -webkit-tap-highlight-color: transparent;
+}
+#ls-back:active { transform: scale(0.96); }
+
+.rating-stars {
+  font-size: 30px;
+  color: #ffe27a;
+  letter-spacing: 4px;
+  text-shadow: 0 2px 8px rgba(255,196,0,0.4);
+}
+
 #parent-gate {
   position: absolute;
   inset: 0;

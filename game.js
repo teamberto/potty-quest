@@ -23,6 +23,12 @@
   const htpStartBtn = document.getElementById('htp-start');
   const bonusHowtoEl = document.getElementById('bonus-howto');
   const bonusHowtoStartBtn = document.getElementById('bonus-howto-start');
+  const menuLevelsBtn = document.getElementById('menu-levels');
+  const levelSelectEl = document.getElementById('level-select');
+  const lsWorldsEl = document.getElementById('ls-worlds');
+  const lsLevelsEl = document.getElementById('ls-levels');
+  const lsHintEl = document.getElementById('ls-hint');
+  const lsBackBtn = document.getElementById('ls-back');
 
   // ---------- Asset loading ----------
   const SPRITE_NAMES = [
@@ -38,6 +44,7 @@
     'icon_trophy',
     'toy_baseball', 'toy_football', 'toy_soccerball', 'toy_poolring',
     'grass', 'fence', 'pool', 'hot_tub', 'sandbox', 'swingset',
+    'candy', 'tree', 'bench', 'porta_potty', 'shelf', 'cart', 'floor_store', 'desk', 'chalkboard',
   ];
   const images = {};
   let assetsLoaded = 0;
@@ -445,6 +452,14 @@
   const POOP_JUKE_MIN_INTERVAL = 0.4; // seconds between juke direction changes (min)
   const POOP_JUKE_MAX_INTERVAL = 0.9; // seconds between juke direction changes (max)
 
+  // Candy turbo (Park onward): if the toddler reaches a candy before you do,
+  // he goes turbo. Grab it first to bank points instead.
+  const CANDY_TURBO_MULT = 1.6;
+  const CANDY_TURBO_TIME = 6;      // seconds of toddler turbo
+  const CANDY_LIFE = 8;            // seconds a candy sits on the floor
+  const CANDY_RADIUS = 15;
+  const CANDY_PLAYER_POINTS = 75;  // reward for snatching it before him
+
   const PEE_POINTS = 100;
   const POOP_POINTS = 160;
   const TIME_BONUS_PER_SEC = 12;   // x seconds left on the alert clock at delivery
@@ -456,12 +471,15 @@
   const PEE_QUOTA = 6;
   const POOP_QUOTA = 7;
 
+  let worldIndex = 0;
   let levelIndex = 0;
-  let level = LEVELS[0];
+  let level = WORLDS[0].levels[0];
+  function worldNow() { return WORLDS[worldIndex]; }
   let timeRemaining = 0;
   let starsThisLevel = 0;
   let peesFixedThisLevel = 0;
   let poopsFixedThisLevel = 0;
+  let trophyGrabbedThisLevel = false;
   let starsTotal = 0;
   let accidentsThisLevel = 0;
   let accidentsTotal = 0;
@@ -498,11 +516,42 @@
   function markBonusHowtoSeen() {
     try { localStorage.setItem('pottychamp_seen_bonus_howto', '1'); } catch (e) {}
   }
+
+  // ---------- World progress (stars + unlocks) ----------
+  const PROGRESS_KEY = 'pottychamp_progress_v1';
+  function loadProgress() {
+    try {
+      const p = JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {};
+      p.stars = p.stars || {};
+      p.unlocked = p.unlocked || { home: true };
+      p.unlocked.home = true; // home is always open
+      return p;
+    } catch (e) { return { stars: {}, unlocked: { home: true } }; }
+  }
+  const progress = loadProgress();
+  function saveProgress() {
+    try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch (e) {}
+  }
+  function starsFor(worldId, idx) {
+    const a = progress.stars[worldId] || [];
+    return a[idx] || 0;
+  }
+  function recordStars(worldId, idx, s) {
+    const a = progress.stars[worldId] || (progress.stars[worldId] = []);
+    if ((a[idx] || 0) < s) { a[idx] = s; saveProgress(); }
+  }
+  function isWorldUnlocked(w) { return !!progress.unlocked[w.id]; }
+  function isWorldComplete(w) { return w.levels.every((_, i) => starsFor(w.id, i) > 0); }
+  function isLevelPlayable(w, idx) { return idx === 0 || starsFor(w.id, idx - 1) > 0; }
+  function starString(n) { return '★'.repeat(n) + '☆'.repeat(Math.max(0, 3 - n)); }
   const TURBO_MAX = 5;      // seconds of turbo in a full power bar
   const TURBO_MULT = 1.6;
   let turboMeter = TURBO_MAX;
   let turboSparkTimer = 0;
   const shoePickup = { active: false, x: 0, y: 0, life: 0, respawnIn: 8 };
+  const candyPickup = { active: false, x: 0, y: 0, life: 0, respawnIn: 10 };
+  let toddlerTurboTimer = 0;
+  let toddlerTurboSparkTimer = 0;
   const SCRUB_TIME = 1.3;
   const SCRUB_RADIUS = 26;
   const MOP_RESPAWN = 4;
@@ -569,13 +618,17 @@
 
   function startLevel(idx) {
     levelIndex = idx;
-    level = LEVELS[idx];
+    level = worldNow().levels[idx];
     timeRemaining = level.duration;
     starsThisLevel = 0;
     peesFixedThisLevel = 0;
     poopsFixedThisLevel = 0;
     accidentsThisLevel = 0;
     scoreThisLevel = 0;
+    trophyGrabbedThisLevel = false;
+    candyPickup.active = false;
+    candyPickup.respawnIn = randRange(7, 12);
+    toddlerTurboTimer = 0;
     trophy.active = false;
     trophy.spawnedThisLevel = false;
     trophy.spawnOnAlertIndex = 2 + Math.floor(Math.random() * 3); // spawns with the level's 2nd-4th alert
@@ -704,7 +757,7 @@
     scoreTotal += bonusScore;
     AudioFX.stopMusic();
     AudioFX.fanfare();
-    const isLast = levelIndex + 1 >= LEVELS.length;
+    const isLast = levelIndex + 1 >= worldNow().levels.length;
     showOverlay(
       'Yard Cleanup complete!',
       `Toys collected: ${toysCollected} &nbsp;|&nbsp; +${bonusScore} pts`,
@@ -728,7 +781,7 @@
       }
     } else if (gameState === 'bonusComplete') {
       const completedIdx = levelIndex;
-      if (completedIdx + 1 < LEVELS.length) {
+      if (completedIdx + 1 < worldNow().levels.length) {
         startLevel(completedIdx + 1);
       } else {
         gameState = 'ending';
@@ -741,14 +794,73 @@
     }
   });
 
-  function beginRun() {
+  function startRunAt(wIdx, lIdx) {
+    worldIndex = wIdx;
     hideMenu();
+    levelSelectEl.classList.add('hidden');
     starsTotal = 0;
     accidentsTotal = 0;
     scoreTotal = 0;
     peeSavedRun = 0;
     poopSavedRun = 0;
-    startLevel(0);
+    startLevel(lIdx);
+  }
+
+  // "Start Play" = continue: first un-starred level in the furthest unlocked world.
+  function beginRun() {
+    for (let wi = 0; wi < WORLDS.length; wi++) {
+      const w = WORLDS[wi];
+      if (!isWorldUnlocked(w)) break;
+      for (let li = 0; li < w.levels.length; li++) {
+        if (starsFor(w.id, li) === 0) { startRunAt(wi, li); return; }
+      }
+    }
+    // Everything cleared — replay the last unlocked world from the top.
+    let lastUnlocked = 0;
+    WORLDS.forEach((w, i) => { if (isWorldUnlocked(w)) lastUnlocked = i; });
+    startRunAt(lastUnlocked, 0);
+  }
+
+  // ---------- World / level select ----------
+  let lsWorldIdx = 0;
+  function openLevelSelect() {
+    hideMenu();
+    // default tab: furthest unlocked world
+    lsWorldIdx = 0;
+    WORLDS.forEach((w, i) => { if (isWorldUnlocked(w)) lsWorldIdx = i; });
+    renderLevelSelect();
+    levelSelectEl.classList.remove('hidden');
+  }
+  function renderLevelSelect() {
+    lsWorldsEl.innerHTML = '';
+    lsLevelsEl.innerHTML = '';
+    WORLDS.forEach((w, wi) => {
+      const b = document.createElement('button');
+      const unlocked = isWorldUnlocked(w);
+      b.className = 'ls-world' + (wi === lsWorldIdx ? ' active' : '') + (unlocked ? '' : ' locked');
+      b.textContent = unlocked ? w.label : `\u{1F512} ${w.label}`;
+      if (unlocked) b.addEventListener('click', () => { lsWorldIdx = wi; renderLevelSelect(); });
+      lsWorldsEl.appendChild(b);
+    });
+    const w = WORLDS[lsWorldIdx];
+    if (!isWorldUnlocked(w)) return;
+    w.levels.forEach((lv, li) => {
+      const b = document.createElement('button');
+      const earned = starsFor(w.id, li);
+      const playable = isLevelPlayable(w, li);
+      b.className = 'ls-level' + (playable ? '' : ' locked');
+      b.innerHTML = playable
+        ? `<span class="ls-num">${li + 1}</span><span class="ls-stars">${starString(earned)}</span>`
+        : `<span class="ls-num">\u{1F512}</span><span class="ls-stars">&nbsp;</span>`;
+      if (playable) b.addEventListener('click', () => startRunAt(lsWorldIdx, li));
+      lsLevelsEl.appendChild(b);
+    });
+    const prev = lsWorldIdx > 0 ? WORLDS[lsWorldIdx - 1] : null;
+    lsHintEl.textContent = isWorldUnlocked(w)
+      ? (lsWorldIdx + 1 < WORLDS.length && !isWorldUnlocked(WORLDS[lsWorldIdx + 1])
+        ? `Clear all 5 levels to unlock ${WORLDS[lsWorldIdx + 1].label}!`
+        : '')
+      : `Clear ${prev ? prev.label : 'the previous world'} to unlock!`;
   }
   let tutorialOpenedFromMenu = false;
   menuStartBtn.addEventListener('click', () => {
@@ -782,6 +894,11 @@
     startBonusRound();
   });
   menuIntroBtn.addEventListener('click', startIntro);
+  if (menuLevelsBtn) menuLevelsBtn.addEventListener('click', openLevelSelect);
+  if (lsBackBtn) lsBackBtn.addEventListener('click', () => {
+    levelSelectEl.classList.add('hidden');
+    showMenu();
+  });
   pauseBtn.addEventListener('click', togglePause);
   canvas.addEventListener('pointerdown', () => {
     if (gameState === 'intro') finishIntro();
@@ -795,18 +912,44 @@
       saveBest({ pee: peeSavedRun, poop: poopSavedRun, total: totalSaves, score: scoreTotal });
       scoreHtml += '<br>\u{1F3C6} NEW HIGH SCORE!';
     }
+
+    // Unlock the next world if this one is now fully cleared.
+    let unlockHtml = '';
+    if (isWorldComplete(worldNow())) {
+      const ni = worldIndex + 1;
+      if (ni < WORLDS.length) {
+        const next = WORLDS[ni];
+        if (!progress.unlocked[next.id]) {
+          progress.unlocked[next.id] = true;
+          saveProgress();
+        }
+        unlockHtml = `<br>\u{1F513} <strong>NEW LOCATION UNLOCKED: ${next.label}!</strong>`;
+      }
+    }
+
+    const w = worldNow();
     const perfect = accidentsTotal === 0;
-    if (perfect) {
+    if (w.id === 'home' && perfect) {
       showOverlay(
         'Cake Time!',
-        `You kept the whole house clean and dry! Mom pulls the cake out of the oven and your little brother gets the first slice, all because of you.${scoreHtml}`,
+        `You kept the whole house clean and dry! Mom pulls the cake out of the oven and your little brother gets the first slice, all because of you.${unlockHtml}${scoreHtml}`,
+        'Back to Menu',
+        '<br><img class="cake" src="assets/cake_whole.png">'
+      );
+    } else if (w.id === 'school' && isWorldComplete(w)) {
+      showOverlay(
+        'POTTY CHAMPION!',
+        `Home, park, store, AND school — your little brother stayed clean and dry everywhere. You are the ultimate Potty Champ!${scoreHtml}`,
         'Back to Menu',
         '<br><img class="cake" src="assets/cake_whole.png">'
       );
     } else {
       showOverlay(
-        'Great Effort!',
-        `You helped your brother so many times! There were a few accidents along the way (${accidentsTotal} total) — the cake is still warming up. Try a perfectly clean run to get the first slice!${scoreHtml}`,
+        `${w.label} cleared!`,
+        (perfect
+          ? `A perfectly clean trip — not a single accident!`
+          : `You made it through with ${accidentsTotal} accident${accidentsTotal === 1 ? '' : 's'}. Try again for a spotless run!`)
+          + `${unlockHtml}${scoreHtml}`,
         'Back to Menu'
       );
     }
@@ -830,9 +973,16 @@
     starsTotal += starsThisLevel;
     accidentsTotal += accidentsThisLevel;
     scoreTotal += scoreThisLevel;
+    // Rating: 1 = finished, 2 = no accidents, 3 = no accidents + trophy grabbed.
+    const rating = 1
+      + (accidentsThisLevel === 0 ? 1 : 0)
+      + (accidentsThisLevel === 0 && trophyGrabbedThisLevel ? 1 : 0);
+    recordStars(worldNow().id, levelIndex, rating);
     showOverlay(
       `${level.label} complete!`,
-      `Score: ${scoreThisLevel} pts &nbsp;|&nbsp; Stars: ${starsThisLevel} &nbsp;|&nbsp; Accidents: ${accidentsThisLevel}`,
+      `<span class="rating-stars">${starString(rating)}</span><br>` +
+      `Score: ${scoreThisLevel} pts &nbsp;|&nbsp; Accidents: ${accidentsThisLevel}` +
+      (rating < 3 ? '<br><small>No accidents + grab the trophy for ★★★</small>' : '<br><small>PERFECT!</small>'),
       'Clean Up the Yard!'
     );
   }
@@ -943,12 +1093,65 @@
   function speedEscalationMult() {
     return 1 + Math.floor(starsThisLevel / SPEED_ESCALATION_STEP) * SPEED_ESCALATION_MULT;
   }
+  function candyTurboMult() { return toddlerTurboTimer > 0 ? CANDY_TURBO_MULT : 1; }
   function toddlerFleeSpeed() {
-    const base = level.fleeSpeed * speedEscalationMult();
+    const base = level.fleeSpeed * speedEscalationMult() * candyTurboMult();
     return toddler.alertType === 'poop' ? base * POOP_SPEED_MULT : base;
   }
   function toddlerWanderSpeed() {
-    return level.wanderSpeed * speedEscalationMult();
+    return level.wanderSpeed * speedEscalationMult() * candyTurboMult();
+  }
+
+  // ---------- Candy turbo (Park onward) ----------
+  function updateCandy(dt) {
+    if (toddlerTurboTimer > 0) {
+      toddlerTurboTimer -= dt;
+      toddlerTurboSparkTimer -= dt;
+      if (toddlerTurboSparkTimer <= 0) {
+        toddlerTurboSparkTimer = 0.12;
+        const tc = centerOf(toddler);
+        spawnBurst(tc.x, tc.y + 6, GOLD_SPARK, 2, 30);
+      }
+    }
+    if (!worldNow().candy) return;
+    if (!candyPickup.active) {
+      candyPickup.respawnIn -= dt;
+      if (candyPickup.respawnIn <= 0) {
+        const p = pickRandomRoomPoint(level.rooms);
+        candyPickup.x = p.x;
+        candyPickup.y = p.y;
+        candyPickup.active = true;
+        candyPickup.life = CANDY_LIFE;
+      }
+      return;
+    }
+    candyPickup.life -= dt;
+    if (candyPickup.life <= 0) {
+      candyPickup.active = false;
+      candyPickup.respawnIn = randRange(8, 13);
+      return;
+    }
+    // The race: whoever reaches the candy first wins it.
+    const tc = centerOf(toddler);
+    if (Math.hypot(tc.x - candyPickup.x, tc.y - candyPickup.y) < CANDY_RADIUS) {
+      candyPickup.active = false;
+      candyPickup.respawnIn = randRange(9, 14);
+      toddlerTurboTimer = CANDY_TURBO_TIME;
+      AudioFX.alert();
+      spawnBurst(candyPickup.x, candyPickup.y, GOLD_SPARK, 14, 70);
+      spawnFloatText(candyPickup.x, candyPickup.y - 18, 'SUGAR RUSH!', '#ff7ab5');
+      return;
+    }
+    const pc = centerOf(player);
+    if (Math.hypot(pc.x - candyPickup.x, pc.y - candyPickup.y) < CANDY_RADIUS) {
+      candyPickup.active = false;
+      candyPickup.respawnIn = randRange(9, 14);
+      scoreThisLevel += CANDY_PLAYER_POINTS;
+      AudioFX.powerup();
+      spawnBurst(candyPickup.x, candyPickup.y, PUFF_WHITE, 10, 50);
+      spawnFloatText(candyPickup.x, candyPickup.y - 18, `+${CANDY_PLAYER_POINTS}`, '#ff7ab5');
+      updateHud();
+    }
   }
 
   function spawnTrophy() {
@@ -969,6 +1172,7 @@
     const pc = centerOf(player);
     if (Math.hypot(pc.x - trophy.x, pc.y - trophy.y) < TROPHY_RADIUS) {
       trophy.active = false;
+      trophyGrabbedThisLevel = true;
       scoreThisLevel += TROPHY_POINTS;
       AudioFX.powerup();
       spawnBurst(trophy.x, trophy.y, GOLD_SPARK, 16, 80);
@@ -1296,6 +1500,7 @@
     updateToddlerAI(dt);
     updateTrophy(dt);
     updateShoePickup(dt);
+    updateCandy(dt);
     updateMop(dt);
     updateCleanup(dt);
     updateParticles(dt);
@@ -1340,7 +1545,7 @@
 
   function drawPottySpots() {
     for (const spot of level.pottySpots) {
-      ctx.drawImage(images.potty, spot.x * TILE - SPRITE_SIZE / 2, spot.y * TILE - SPRITE_SIZE / 2);
+      ctx.drawImage(images[level.pottyImg || 'potty'], spot.x * TILE - SPRITE_SIZE / 2, spot.y * TILE - SPRITE_SIZE / 2);
     }
   }
 
@@ -1370,6 +1575,14 @@
     if (blink) return;
     const bob = Math.sin(performance.now() / 200) * 2;
     ctx.drawImage(images.turbo_shoe, shoePickup.x - 8, shoePickup.y - 8 + bob, 16, 16);
+  }
+
+  function drawCandy() {
+    if (!candyPickup.active) return;
+    const blink = candyPickup.life < 3 && Math.floor(performance.now() / 150) % 2 === 0;
+    if (blink) return;
+    const bob = Math.sin(performance.now() / 180) * 2;
+    ctx.drawImage(images.candy, candyPickup.x - 8, candyPickup.y - 8 + bob, 16, 16);
   }
 
   function drawTrophy() {
@@ -1417,6 +1630,7 @@
     drawScrubBars();
     drawPottySpots();
     drawShoePickup();
+    drawCandy();
     drawTrophy();
     drawMopSpot();
 
@@ -1428,15 +1642,17 @@
       const px = f.x * TILE, py = f.y * TILE;
       drawables.push({ img, x: px, y: py, sortY: py + f.hTiles * TILE });
     }
-    // nail salon: mom files away at the client's nails across the table
-    drawables.push({
-      img: images[Math.floor(performance.now() / 500) % 2 === 0 ? 'mom' : 'mom_alt'],
-      x: MOM_POS.x * TILE, y: MOM_POS.y * TILE, sortY: MOM_POS.y * TILE + TILE,
-    });
-    drawables.push({
-      img: images.client,
-      x: CLIENT_POS.x * TILE, y: CLIENT_POS.y * TILE, sortY: CLIENT_POS.y * TILE + TILE,
-    });
+    // nail salon: mom files away at the client's nails (Home world only)
+    if (worldNow().momSalon) {
+      drawables.push({
+        img: images[Math.floor(performance.now() / 500) % 2 === 0 ? 'mom' : 'mom_alt'],
+        x: MOM_POS.x * TILE, y: MOM_POS.y * TILE, sortY: MOM_POS.y * TILE + TILE,
+      });
+      drawables.push({
+        img: images.client,
+        x: CLIENT_POS.x * TILE, y: CLIENT_POS.y * TILE, sortY: CLIENT_POS.y * TILE + TILE,
+      });
+    }
     drawables.push({ custom: 'player', sortY: player.y + player.h });
     drawables.push({ custom: 'toddler', sortY: toddler.y + toddler.h });
 
