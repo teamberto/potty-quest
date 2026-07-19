@@ -201,7 +201,7 @@ canvas#game {
 #menu-start:active { transform: scale(0.96); }
 
 /* Mode buttons: same hero treatment as Story, gold-outline variant */
-#menu-levels, #menu-dash, #menu-mayhem, #menu-daily, #menu-endless {
+#menu-levels, #menu-dash, #menu-mayhem, #menu-daily, #menu-endless, #menu-stickers {
   min-width: 320px;
   padding: 14px 36px;
   font-size: 18px;
@@ -214,7 +214,7 @@ canvas#game {
   -webkit-tap-highlight-color: transparent;
 }
 #menu-levels:active, #menu-dash:active, #menu-mayhem:active,
-#menu-daily:active, #menu-endless:active {
+#menu-daily:active, #menu-endless:active, #menu-stickers:active {
   transform: scale(0.96);
   background: rgba(255,196,0,0.28);
 }
@@ -716,11 +716,17 @@ canvas#game {
   padding: 20px;
 }
 #sticker-book.hidden { display: none; }
+#sticker-book {
+  touch-action: pan-y; /* allow finger-scrolling here (the game canvas blocks it globally) */
+}
 #sb-box {
   width: 100%;
   max-width: 480px;
   max-height: 92vh;
   overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   color: #fff;
   font-family: -apple-system, "Helvetica Neue", sans-serif;
   text-align: center;
