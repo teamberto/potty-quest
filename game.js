@@ -492,7 +492,7 @@
 
   // Level goal: rescue this many of each before the level is complete. No timer
   // — you finish by hitting the quota, and it's game over if you run out of hearts.
-  const PEE_QUOTA = 6;
+  const PEE_QUOTA = 7;
   const POOP_QUOTA = 7;
 
   let worldIndex = 0;
@@ -715,7 +715,7 @@
   const BONUS_DURATION = 60;
   const TOY_PICKUP_RADIUS = 14;
   const CHEST_RADIUS = 20;
-  const MAX_GROUND_TOYS = 5;
+  const MAX_GROUND_TOYS = 9;   // busier yard = no waiting around
   let bonusTimeRemaining = 0;
   let bonusScore = 0;
   let toysCollected = 0;
@@ -990,7 +990,7 @@
     toysCollected = 0;
     carriedToy = null;
     bonusToys = BONUS_SCENE.presetToys.map((t) => ({ ...t }));
-    bonusSpawnTimer = randRange(4, 7);
+    bonusSpawnTimer = randRange(1.3, 2.6);
     turboMeter = maxTurbo();
     particles.length = 0;
     const sp = BONUS_SCENE.playerStart;
@@ -1114,6 +1114,7 @@
   const DASH_MAX_HITS = 3;         // boo-boos before the run ends
   const DASH_CHAR_SCALE = 2;       // 2x sprites — big chunky runners
   const DASH_STICKER_M = 500;      // Road Runner sticker distance
+  const DASH_JUMP_TIME = 0.6;      // seconds airborne after a swipe up
 
   let dashScroll = 0;
   let dashSpeed = DASH_START_SPEED;
@@ -1125,8 +1126,22 @@
   let dashObjs = [];
   let dashSpawnGap = 0;
   let dashInvincible = 0;
-  let dashPrevLeft = false, dashPrevRight = false;
-  let dashSwipeX = null;
+  let dashJumpT = 0;
+  let dashPrevLeft = false, dashPrevRight = false, dashPrevUp = false;
+  let dashSwipeX = null, dashSwipeY = null;
+  let dashTut = null; // interactive first-run tutorial state
+
+  function hasSeenDashTut() {
+    try { return localStorage.getItem('pottychamp_dash_tut') === '1'; } catch (e) { return false; }
+  }
+  function markDashTutSeen() {
+    try { localStorage.setItem('pottychamp_dash_tut', '1'); } catch (e) {}
+  }
+  function dashJump() {
+    if (dashJumpT > 0) return;
+    dashJumpT = DASH_JUMP_TIME;
+    AudioFX.catch();
+  }
 
   function dashLaneX(lane) {
     return WORLD_W / 2 + (lane - 1) * DASH_LANE_W;
@@ -1146,9 +1161,13 @@
     dashObjs = [];
     dashSpawnGap = 140;
     dashInvincible = 0;
+    dashJumpT = 0;
     particles.length = 0;
     heartsEl.style.display = '';
     hearts = DASH_MAX_HITS;
+    // first time playing? run the follow-along tutorial
+    dashTut = hasSeenDashTut() ? null : { step: 0, phase: 'run', t: 1.2, want: null, obstacle: null };
+    if (dashTut) showBanner('Follow the moves!', '#ffd23f');
     updateDashHud();
     hideOverlay();
     AudioFX.startMusic();
@@ -1174,6 +1193,73 @@
     }
   }
 
+  // ---------- Dash tutorial: game freezes, shows the gesture, waits for it ----------
+  function updateDashTutorial(dt) {
+    const T = dashTut;
+    const playerY = WORLD_H - 64;
+    updateParticles(dt);
+    updateFloatingTexts(dt);
+    if (T.phase === 'run') {
+      dashSpeed = 150;
+      dashScroll += dashSpeed * dt;
+      T.t -= dt;
+      if (T.t <= 0) {
+        if (T.step === 0) { T.phase = 'prompt'; T.want = 'left'; }
+        else if (T.step === 1) { T.phase = 'prompt'; T.want = 'right'; }
+        else if (T.step === 2) {
+          // drop a poop stain in the player's lane — time to learn the jump
+          T.obstacle = { kind: 'obstacle', type: 'stain_poop', lane: dashLane, y: -40 };
+          dashObjs.push(T.obstacle);
+          T.phase = 'approach';
+        } else {
+          finishDashTutorial();
+        }
+      }
+    } else if (T.phase === 'approach') {
+      dashSpeed = 150;
+      dashScroll += dashSpeed * dt;
+      T.obstacle.y += dashSpeed * dt;
+      if (T.obstacle.y > playerY - 95) { T.phase = 'prompt'; T.want = 'up'; }
+    } else if (T.phase === 'prompt') {
+      dashSpeed = 0; // world frozen until they do the move
+    } else if (T.phase === 'clear') {
+      dashSpeed = 250;
+      dashScroll += dashSpeed * dt;
+      if (T.obstacle) {
+        T.obstacle.y += dashSpeed * dt;
+        if (T.obstacle.y > playerY + 70) { T.step = 3; T.t = 0.7; T.phase = 'run'; }
+      }
+    }
+    updateDashHud();
+  }
+
+  // Returns true if the tutorial consumed the gesture.
+  function dashTutorialGesture(g) {
+    const T = dashTut;
+    if (!T) return false;
+    if (T.phase !== 'prompt') return true; // ignore inputs mid-run during tutorial
+    if (g !== T.want) return true;         // wrong move — keep waiting
+    if (g === 'left') { dashChangeLane(-1); T.step = 1; T.phase = 'run'; T.t = 1.1; }
+    else if (g === 'right') { dashChangeLane(1); T.step = 2; T.phase = 'run'; T.t = 1.1; }
+    else if (g === 'up') { dashJumpT = DASH_JUMP_TIME; AudioFX.powerup(); T.phase = 'clear'; }
+    spawnBurst(dashLaneX(dashLane), WORLD_H - 64, GOLD_SPARK, 10, 55);
+    showBanner(g === 'up' ? 'NICE JUMP!' : 'PERFECT!', '#9fe8a9');
+    return true;
+  }
+
+  function finishDashTutorial() {
+    markDashTutSeen();
+    dashTut = null;
+    dashObjs = [];
+    dashScroll = 0;
+    dashScore = 0;
+    dashHits = 0;
+    hearts = DASH_MAX_HITS;
+    dashSpeed = DASH_START_SPEED;
+    dashSpawnGap = 140;
+    showBanner('GO! GO! GO!', '#ffd23f');
+  }
+
   function endDash() {
     gameState = 'dashOver';
     AudioFX.stopMusic();
@@ -1191,14 +1277,17 @@
   }
 
   function updateDash(dt) {
+    if (dashJumpT > 0) dashJumpT -= dt;
+    if (dashTut) { updateDashTutorial(dt); return; }
     dashSpeed = Math.min(DASH_MAX_SPEED, dashSpeed + DASH_ACCEL * dt);
     dashScroll += dashSpeed * dt;
     dashScore += Math.round(dashSpeed * dt * 0.02); // trickle points for distance
 
-    // lane input: keyboard edges
+    // lane input: keyboard edges (up arrow = jump)
     if (input.left && !dashPrevLeft) dashChangeLane(-1);
     if (input.right && !dashPrevRight) dashChangeLane(1);
-    dashPrevLeft = input.left; dashPrevRight = input.right;
+    if (input.up && !dashPrevUp) dashJump();
+    dashPrevLeft = input.left; dashPrevRight = input.right; dashPrevUp = input.up;
 
     // Champ mirrors your lane with a little lag
     if (dashChampLaneDelay > 0) {
@@ -1244,7 +1333,7 @@
         spawnFloatText(dashLaneX(o.lane), o.y - 20, `+${pts}`, '#ffe27a');
         spawnBurst(dashLaneX(o.lane), o.y, GOLD_SPARK, 8, 50);
         dashObjs.splice(i, 1);
-      } else if (dashInvincible <= 0) {
+      } else if (dashInvincible <= 0 && dashJumpT <= 0) { // airborne = safely over it
         dashHits++;
         hearts = DASH_MAX_HITS - dashHits;
         dashInvincible = 1.2;
@@ -1263,53 +1352,81 @@
 
   function drawDash() {
     ctx.imageSmoothingEnabled = false;
-    // grass field
-    const off = Math.floor(dashScroll % TILE);
-    for (let ty = -1; ty < GRID_ROWS + 1; ty++) {
-      for (let tx = 0; tx < GRID_COLS; tx++) {
+    // How much world space exists beyond the 528x336 play area on this screen
+    // (the letterbox margins) — we paint all of it so the game fills the phone.
+    const exL = Math.ceil(offsetX / scale) + TILE;
+    const exT = Math.ceil(offsetY / scale) + TILE;
+
+    // grass field, edge to edge, scrolling smoothly
+    const off = dashScroll % TILE;
+    const txStart = -Math.ceil(exL / TILE) - 1;
+    const txEnd = GRID_COLS + Math.ceil(exL / TILE) + 1;
+    const tyStart = -Math.ceil(exT / TILE) - 2;
+    const tyEnd = GRID_ROWS + Math.ceil(exT / TILE) + 1;
+    for (let ty = tyStart; ty < tyEnd; ty++) {
+      for (let tx = txStart; tx < txEnd; tx++) {
         ctx.drawImage(images.grass, tx * TILE, ty * TILE + off);
       }
     }
-    // road
+    // road (full height of the visible screen)
     const roadX = WORLD_W / 2 - (DASH_LANE_W * DASH_LANES) / 2;
     const roadW = DASH_LANE_W * DASH_LANES;
     ctx.fillStyle = '#8d939c';
-    ctx.fillRect(roadX, 0, roadW, WORLD_H);
+    ctx.fillRect(roadX, -exT, roadW, WORLD_H + exT * 2);
     ctx.fillStyle = '#f2f4f6';
-    ctx.fillRect(roadX - 3, 0, 3, WORLD_H);
-    ctx.fillRect(roadX + roadW, 0, 3, WORLD_H);
+    ctx.fillRect(roadX - 3, -exT, 3, WORLD_H + exT * 2);
+    ctx.fillRect(roadX + roadW, -exT, 3, WORLD_H + exT * 2);
     // dashed lane lines scrolling with the road
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     const dashLen = 16, gapLen = 20, seg = dashLen + gapLen;
-    const lineOff = (dashScroll % seg);
+    const lineOff = dashScroll % seg;
     for (let li = 1; li < DASH_LANES; li++) {
       const lx = roadX + li * DASH_LANE_W - 2;
-      for (let y = -seg + lineOff; y < WORLD_H; y += seg) {
+      for (let y = -exT - seg + lineOff; y < WORLD_H + exT; y += seg) {
         ctx.fillRect(lx, y, 4, dashLen);
       }
     }
-    // roadside trees, marching down
+    // roadside trees, marching down smoothly (two rows each side)
     const treeSeg = 96;
     const treeOff = dashScroll % treeSeg;
-    for (let y = -treeSeg + treeOff - 48; y < WORLD_H + 48; y += treeSeg) {
+    for (let y = -exT - treeSeg + treeOff - 48; y < WORLD_H + exT + 48; y += treeSeg) {
       ctx.drawImage(images.tree, roadX - 42, y);
       ctx.drawImage(images.tree, roadX + roadW + 18, y + 44);
+      if (exL > 60) {
+        ctx.drawImage(images.tree, roadX - exL + 6, y + 22);
+        ctx.drawImage(images.tree, roadX + roadW + exL - 30, y + 66);
+      }
     }
 
-    // objects
+    // objects — red warning glow under hazards, gold glow under goodies
+    const now = performance.now();
     for (const o of dashObjs) {
       const ox = dashLaneX(o.lane);
       if (o.kind === 'obstacle') {
+        const pulse = 0.5 + Math.sin(now / 150) * 0.2;
+        ctx.fillStyle = `rgba(255,70,70,${(0.22 * pulse + 0.12).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.ellipse(ox, o.y + 8, 20, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255,90,90,${(0.45 + 0.25 * pulse).toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(ox, o.y, 19, 0, Math.PI * 2);
+        ctx.stroke();
         const size = o.type === 'cart' ? 34 : 28;
         ctx.drawImage(images[o.type], ox - size / 2, o.y - size / 2, size, size);
       } else {
-        const bob = Math.sin((performance.now() + o.y) / 160) * 2;
+        const bob = Math.sin((now + o.y) / 160) * 2;
+        ctx.fillStyle = 'rgba(255,210,63,0.30)';
+        ctx.beginPath();
+        ctx.ellipse(ox, o.y + 9, 16, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
         ctx.drawImage(images[o.type], ox - 11, o.y - 11 + bob, 22, 22);
       }
     }
 
     // Champ sprinting ahead of you (drawn big)
-    const frame = Math.floor(performance.now() / 110) % 2;
+    const frame = Math.floor(now / 110) % 2;
     const champSize = SPRITE_SIZE * DASH_CHAR_SCALE * 0.9;
     ctx.drawImage(
       images[`little_up_${frame}`],
@@ -1317,38 +1434,81 @@
       WORLD_H - 148,
       champSize, champSize
     );
-    // you, pounding pavement (blink while invincible)
-    const blink = dashInvincible > 0 && Math.floor(performance.now() / 120) % 2 === 0;
+    // you, pounding pavement (blink while invincible, arc up while jumping)
+    const blink = dashInvincible > 0 && dashJumpT <= 0 && Math.floor(now / 120) % 2 === 0;
     if (!blink) {
       const meSize = SPRITE_SIZE * DASH_CHAR_SCALE;
-      ctx.drawImage(
-        images[`big_up_${frame}`],
-        dashLaneX(dashLane) - meSize / 2,
-        WORLD_H - 84,
-        meSize, meSize
-      );
+      const meX = dashLaneX(dashLane) - meSize / 2;
+      const meY = WORLD_H - 84;
+      let lift = 0;
+      if (dashJumpT > 0) {
+        const p = 1 - dashJumpT / DASH_JUMP_TIME;
+        lift = Math.sin(p * Math.PI) * 36;
+      }
+      // shadow shrinks while airborne
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(dashLaneX(dashLane), meY + meSize - 4, 18 - lift * 0.2, 6 - lift * 0.06, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.drawImage(images[`big_up_${frame}`], meX, meY - lift, meSize, meSize);
     }
 
     drawParticles();
     drawFloatingTexts();
+    drawBanner();
+
+    // tutorial prompt: dark veil + big instruction + animated hand
+    if (dashTut && dashTut.phase === 'prompt') {
+      ctx.fillStyle = 'rgba(8,9,14,0.55)';
+      ctx.fillRect(-exL, -exT, WORLD_W + exL * 2, WORLD_H + exT * 2);
+      const w = dashTut.want;
+      const msg = w === 'left' ? 'SWIPE LEFT!' : w === 'right' ? 'SWIPE RIGHT!' : 'SWIPE UP TO JUMP!';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '900 30px -apple-system, "Helvetica Neue", sans-serif';
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = 'rgba(10,8,4,0.95)';
+      ctx.strokeText(msg, WORLD_W / 2, WORLD_H / 2 - 56);
+      ctx.fillStyle = '#ffe27a';
+      ctx.fillText(msg, WORLD_W / 2, WORLD_H / 2 - 56);
+      // animated hand sliding in the gesture direction
+      const slide = (Math.sin(now / 300) + 1) / 2; // 0..1
+      let hx = WORLD_W / 2, hy = WORLD_H / 2 + 10;
+      if (w === 'left') hx = WORLD_W / 2 + 50 - slide * 100;
+      else if (w === 'right') hx = WORLD_W / 2 - 50 + slide * 100;
+      else hy = WORLD_H / 2 + 34 - slide * 60;
+      ctx.font = '44px -apple-system';
+      ctx.fillText(w === 'up' ? '\u{261D}\u{FE0F}' : '\u{1F446}', hx, hy);
+      const arrow = w === 'left' ? '\u{2B05}\u{FE0F}' : w === 'right' ? '\u{27A1}\u{FE0F}' : '\u{2B06}\u{FE0F}';
+      ctx.font = '30px -apple-system';
+      ctx.fillText(arrow, WORLD_W / 2, WORLD_H / 2 - 20);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+    }
     ctx.imageSmoothingEnabled = true;
   }
 
-  // swipe to change lanes (pointer events cover touch + mouse)
+  // swipe to change lanes / swipe up to jump (pointer events cover touch + mouse)
   canvas.addEventListener('pointerdown', (e) => {
-    if (gameState === 'dash') dashSwipeX = e.clientX;
+    if (gameState === 'dash') { dashSwipeX = e.clientX; dashSwipeY = e.clientY; }
   });
   canvas.addEventListener('pointerup', (e) => {
     if (gameState !== 'dash' || dashSwipeX === null) return;
     const dx = e.clientX - dashSwipeX;
-    dashSwipeX = null;
-    if (dx > 24) dashChangeLane(1);
-    else if (dx < -24) dashChangeLane(-1);
+    const dy = e.clientY - dashSwipeY;
+    dashSwipeX = null; dashSwipeY = null;
+    let g;
+    if (Math.abs(dy) > Math.abs(dx) && dy < -24) g = 'up';
+    else if (dx > 24) g = 'right';
+    else if (dx < -24) g = 'left';
     else {
       // simple tap: left half = left, right half = right (little-kid friendly)
       const rect = canvas.getBoundingClientRect();
-      dashChangeLane(e.clientX < rect.left + rect.width / 2 ? -1 : 1);
+      g = e.clientX < rect.left + rect.width / 2 ? 'left' : 'right';
     }
+    if (dashTut) { dashTutorialGesture(g); return; }
+    if (g === 'up') dashJump();
+    else dashChangeLane(g === 'right' ? 1 : -1);
   });
 
   overlayButton.addEventListener('click', () => {
@@ -1857,7 +2017,13 @@
       t.nextAlertIn -= dt;
       if (t.nextAlertIn <= 0) {
         t.alertActive = true;
-        t.alertType = Math.random() < 0.55 ? 'pee' : 'poop';
+        // Don't keep sending alerts for a goal that's already done — once the
+        // poop quota is met, only pees pop up (and vice versa).
+        const peeDone = peesFixedThisLevel >= PEE_QUOTA;
+        const poopDone = poopsFixedThisLevel >= POOP_QUOTA;
+        if (poopDone && !peeDone) t.alertType = 'pee';
+        else if (peeDone && !poopDone) t.alertType = 'poop';
+        else t.alertType = Math.random() < 0.55 ? 'pee' : 'poop';
         t.alertTimeRemaining = level.alertTimeLimit
           + (t.alertType === 'poop' ? POOP_EXTRA_TIME : 0)
           + (worldNow().twins ? TWINS_ALERT_TIME_BONUS : 0);
@@ -2253,7 +2419,7 @@
     if (bonusTimeRemaining > 5 && bonusToys.length < MAX_GROUND_TOYS) {
       bonusSpawnTimer -= dt;
       if (bonusSpawnTimer <= 0) {
-        bonusSpawnTimer = randRange(4, 7);
+        bonusSpawnTimer = randRange(1.3, 2.6);
         const p = pickRandomOpenPoint(BONUS_SCENE);
         const type = TOY_TYPES[Math.floor(Math.random() * TOY_TYPES.length)];
         bonusToys.push({ x: p.x, y: p.y, type });
