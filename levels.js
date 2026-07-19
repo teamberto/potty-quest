@@ -45,73 +45,67 @@ const FURNITURE_L4 = [
 const MOM_POS = { x: 5, y: 4 };
 const CLIENT_POS = { x: 7, y: 4 };
 
-const LEVELS = [
-  {
-    label: "Level 1 – Downstairs",
-    duration: 165,
-    rooms: [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1],
-    furniture: [...FURNITURE_BASE],
-    pottySpots: [{ x: 10.5, y: 8 }],
-    mopSpot: { x: 5, y: 12 },
-    bigStart: { x: 3, y: 5 },
-    littleStart: { x: 5, y: 3 },
-    alertMin: 6.5, alertMax: 10,
-    wanderSpeed: 44, fleeSpeed: 78,
-    alertTimeLimit: 11,
-  },
-  {
-    label: "Level 2 – The Bedroom Opens Up",
-    duration: 165,
-    rooms: [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom],
-    furniture: [...FURNITURE_BASE, ...FURNITURE_L2],
-    pottySpots: [{ x: 10.5, y: 8 }],
-    mopSpot: { x: 5, y: 12 },
-    bigStart: { x: 3, y: 5 },
-    littleStart: { x: 9, y: 10 },
-    alertMin: 5.5, alertMax: 9,
-    wanderSpeed: 50, fleeSpeed: 86,
-    alertTimeLimit: 10,
-  },
-  {
-    label: "Level 3 – The Whole House!",
-    duration: 165,
-    rooms: [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom, ROOMS.mudroom],
-    furniture: [...FURNITURE_BASE, ...FURNITURE_L2, ...FURNITURE_L3],
-    pottySpots: [{ x: 10.5, y: 8 }],
-    mopSpot: { x: 5, y: 12 },
-    bigStart: { x: 3, y: 5 },
-    littleStart: { x: 18, y: 10 },
-    alertMin: 5, alertMax: 8,
-    wanderSpeed: 56, fleeSpeed: 94,
-    alertTimeLimit: 9,
-  },
-  {
-    label: "Level 4 – Busy House",
-    duration: 165,
-    rooms: [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom, ROOMS.mudroom],
-    furniture: [...FURNITURE_BASE, ...FURNITURE_L2, ...FURNITURE_L3, ...FURNITURE_L4],
-    pottySpots: [{ x: 10.5, y: 8 }],
-    mopSpot: { x: 5, y: 12 },
-    bigStart: { x: 3, y: 5 },
-    littleStart: { x: 9, y: 10 },
-    alertMin: 4, alertMax: 6.5,
-    wanderSpeed: 60, fleeSpeed: 100,
-    alertTimeLimit: 8.5,
-  },
-  {
-    label: "Level 5 – Cake Day Chaos",
-    duration: 165,
-    rooms: [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom, ROOMS.mudroom],
-    furniture: [...FURNITURE_BASE, ...FURNITURE_L2, ...FURNITURE_L3, ...FURNITURE_L4],
-    pottySpots: [{ x: 10.5, y: 8 }],
-    mopSpot: { x: 5, y: 12 },
-    bigStart: { x: 3, y: 5 },
-    littleStart: { x: 18, y: 10 },
-    alertMin: 3.5, alertMax: 5.5,
-    wanderSpeed: 66, fleeSpeed: 108,
-    alertTimeLimit: 7.5,
-  },
+// ---------- World 1: Home — 15 levels, gentle on-ramp ----------
+// Difficulty rebases at ~2/10 on level 1 and slides to ~5.5/10 by level 15.
+// Goals ramp 1+1 -> 4+4 (cap). Playdate levels bring a second kid to visit;
+// from level 13 on, the playdate friend stays for good.
+const HOME_NAMES = [
+  'First Steps', 'Playdate!', 'The Bedroom Opens Up', 'Getting Busy',
+  'The Whole House!', 'Poop Patrol', 'Full House Hustle', 'Playdate Returns!',
+  'Speedy Toddler', 'Halfway Hero', 'No More Naps', 'Busy Busy House',
+  'Playdate Party', 'Almost a Champ', 'Cake Day Chaos',
 ];
+const HOME_GOALS = [
+  [1, 1], [1, 2], [2, 2], [2, 3], [3, 3], [3, 4],
+  [4, 4], [4, 4], [4, 4], [4, 4], [4, 4], [4, 4], [4, 4], [4, 4], [4, 4],
+];
+
+function homeLevel(n) {
+  const t = (n - 1) / 14; // 0 at level 1 -> 1 at level 15
+  // Rooms + furniture open up as the levels go on.
+  let rooms, furniture, littleStart;
+  if (n === 1) {
+    rooms = [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1];
+    furniture = [...FURNITURE_BASE];
+    littleStart = { x: 5, y: 3 };
+  } else if (n <= 3) {
+    rooms = [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom];
+    furniture = [...FURNITURE_BASE, ...FURNITURE_L2];
+    littleStart = { x: 9, y: 10 };
+  } else if (n <= 6) {
+    rooms = [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom, ROOMS.mudroom];
+    furniture = [...FURNITURE_BASE, ...FURNITURE_L2, ...FURNITURE_L3];
+    littleStart = { x: 18, y: 10 };
+  } else {
+    rooms = [ROOMS.livingRoom, ROOMS.kitchen, ROOMS.hallway, ROOMS.bathroom1, ROOMS.bedroom, ROOMS.mudroom];
+    furniture = [...FURNITURE_BASE, ...FURNITURE_L2, ...FURNITURE_L3, ...FURNITURE_L4];
+    littleStart = n % 2 ? { x: 18, y: 10 } : { x: 9, y: 10 };
+  }
+  const playdate = n === 2 || n === 8 || n >= 13;   // 2-kid levels
+  const extraEasy = n === 2 || n === 8;             // cameo playdates get training wheels
+  const ease = extraEasy ? 1 : 0;
+  return {
+    label: `Level ${n} \u2013 ${HOME_NAMES[n - 1]}`,
+    duration: 165,
+    rooms, furniture,
+    pottySpots: [{ x: 10.5, y: 8 }],
+    mopSpot: { x: 5, y: 12 },
+    bigStart: { x: 3, y: 5 },
+    littleStart,
+    peeGoal: HOME_GOALS[n - 1][0],
+    poopGoal: HOME_GOALS[n - 1][1],
+    kids: playdate ? 2 : 1,
+    playdate,
+    bonusAfter: n % 2 === 0 || n === 15,
+    alertMin: +(9 - 5.5 * t + ease * 2).toFixed(2),
+    alertMax: +(13 - 7.5 * t + ease * 3).toFixed(2),
+    wanderSpeed: Math.round((34 + 32 * t) * (extraEasy ? 0.85 : 1)),
+    fleeSpeed: Math.round((58 + 50 * t) * (extraEasy ? 0.85 : 1)),
+    alertTimeLimit: +((14 - 6.5 * t) * (extraEasy ? 1.4 : 1)).toFixed(2),
+  };
+}
+
+const LEVELS = Array.from({ length: 15 }, (_, i) => homeLevel(i + 1));
 
 // ---------- World 2: The Park (open space — hard to corner him) ----------
 const PARK_FURNITURE = [
@@ -128,6 +122,7 @@ const PARK_FURNITURE = [
 function parkLevel(n, tuning) {
   return Object.assign({
     label: `Park ${n}`,
+    bonusAfter: n % 2 === 0 || n === 5,
     duration: 165,
     floorTile: 'grass',
     wallTile: 'fence',
@@ -178,6 +173,7 @@ const STORE_FURNITURE = [
 function storeLevel(n, tuning) {
   return Object.assign({
     label: `Store ${n}`,
+    bonusAfter: n % 2 === 0 || n === 5,
     duration: 165,
     floorTile: 'floor_store',
     rooms: [{ x: 1, y: 1, w: 19, h: 12 }],
@@ -225,6 +221,7 @@ const SCHOOL_FURNITURE = [
 function schoolLevel(n, tuning) {
   return Object.assign({
     label: `School ${n}`,
+    bonusAfter: n % 2 === 0 || n === 5,
     duration: 165,
     rooms: [SCHOOL_ROOMS.classA, SCHOOL_ROOMS.classB, SCHOOL_ROOMS.hallway, SCHOOL_ROOMS.cafeteria],
     furniture: SCHOOL_FURNITURE,
@@ -251,7 +248,7 @@ const WORLDS = [
   { id: 'school', label: 'School', icon: 'chalkboard', momSalon: false, candy: true, twins: true, levels: LEVELS_SCHOOL },
 ];
 
-// ---------- Backyard bonus round (runs after every level) ----------
+// ---------- Backyard bonus round (runs after every 2nd level) ----------
 const TOY_TYPES = ['toy_baseball', 'toy_football', 'toy_soccerball', 'toy_poolring'];
 
 const BONUS_SCENE = {

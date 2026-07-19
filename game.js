@@ -492,7 +492,6 @@
   const ALERT_JOLT_MULT = 2.4;     // speed multiplier during the burst
 
   // Twins levels are the hardest in the game, so the player gets help there:
-  const TWINS_ALERT_TIME_BONUS = 2;   // extra seconds on every alert countdown
   const TWINS_TURBO_BONUS = 2.5;      // extra seconds of sprint in the power bar
 
   const PEE_POINTS = 100;
@@ -503,8 +502,16 @@
 
   // Level goal: rescue this many of each before the level is complete. No timer
   // — you finish by hitting the quota, and it's game over if you run out of hearts.
-  const PEE_QUOTA = 7;
-  const POOP_QUOTA = 7;
+  // Each level sets its own peeGoal/poopGoal (Home ramps 1+1 up to 4+4);
+  // anything without explicit goals (endless, daily, later worlds) uses 4+4.
+  const DEFAULT_PEE_GOAL = 4;
+  const DEFAULT_POOP_GOAL = 4;
+  function peeQuota() { return (level && level.peeGoal) || DEFAULT_PEE_GOAL; }
+  function poopQuota() { return (level && level.poopGoal) || DEFAULT_POOP_GOAL; }
+  // Fairness kit for levels with more than one kid: every alert clock runs
+  // longer and alerts are spaced further apart, so two kids never overwhelm.
+  const MULTIKID_TIME_SCALE = 1.45;
+  const MULTIKID_SPACING_SCALE = 1.35;
 
   let worldIndex = 0;
   let levelIndex = 0;
@@ -998,25 +1005,28 @@
     const bp = tileToPx(level.bigStart);
     player.x = bp.x; player.y = bp.y; player.facing = 'down'; player.moving = false;
 
-    // Spawn the toddler — and his twin, in worlds marked twins (School!).
+    // Spawn the toddler — plus extra kids on playdate levels (level.kids) and
+    // in worlds marked twins (School!).
+    const kidCount = level.kids || (worldNow().twins ? 2 : 1);
     toddlers = [makeToddler()];
-    if (worldNow().twins) {
-      const twin = makeToddler();
-      twin.isTwin = true;
-      toddlers.push(twin);
+    for (let ki = 1; ki < kidCount; ki++) {
+      const kid = makeToddler();
+      kid.isTwin = true;
+      toddlers.push(kid);
     }
     toddlers.forEach((t, i) => {
       const lp = tileToPx(level.littleStart);
       t.x = lp.x + i * TILE; t.y = lp.y;
       t.wanderTarget = pickRandomRoomPoint(level.rooms);
-      // stagger the twin's first alert so they don't both scream at once (at first)
-      t.nextAlertIn = randRange(level.alertMin, level.alertMax) + i * 3;
+      // stagger each extra kid's first alert so crises alternate, never stack
+      t.nextAlertIn = randRange(level.alertMin, level.alertMax) + i * 5;
     });
 
     updateHud();
     gameState = 'playing';
     hideOverlay();
     AudioFX.startMusic();
+    if (level.playdate) showBanner('\u{1F476}\u{1F476} PLAYDATE!', '#ffd23f');
   }
 
   function showOverlay(title, message, buttonText, extraHtml) {
@@ -1038,7 +1048,7 @@
       return;
     }
     // Goal progress replaces the old countdown clock.
-    timerEl.textContent = `\u{1F4A7} ${peesFixedThisLevel}/${PEE_QUOTA}  \u{1F4A9} ${poopsFixedThisLevel}/${POOP_QUOTA}`;
+    timerEl.textContent = `\u{1F4A7} ${peesFixedThisLevel}/${peeQuota()}  \u{1F4A9} ${poopsFixedThisLevel}/${poopQuota()}`;
     starsEl.textContent = `★ ${starsThisLevel}`;
     scoreEl.textContent = `${scoreThisLevel} pts`;
     heartImgs.forEach((img, i) => {
@@ -1315,6 +1325,11 @@
   const DASH_CHAR_SCALE = 2;       // 2x sprites — big chunky runners
   const DASH_STICKER_M = 500;      // Road Runner sticker distance
   const DASH_JUMP_TIME = 0.6;      // seconds airborne after a swipe up
+  // Turbo Focus: hold the ⚡ button and the WORLD slows down (you feel fast).
+  // Draining meter, refilled only by grabbing turbo boots on the road.
+  const DASH_FOCUS_MAX = 3.5;      // seconds of focus in a full meter
+  const DASH_FOCUS_SCALE = 0.4;    // world speed while focusing (lower = slower)
+  const DASH_BOOT_REFILL = 2.0;    // seconds of focus per boot grabbed
 
   let dashScroll = 0;
   let dashSpeed = DASH_START_SPEED;
@@ -1327,6 +1342,8 @@
   let dashSpawnGap = 0;
   let dashInvincible = 0;
   let dashJumpT = 0;
+  let dashFocusMeter = DASH_FOCUS_MAX;
+  let dashFocusOn = false;
   let dashPrevLeft = false, dashPrevRight = false, dashPrevUp = false;
   let dashSwipeX = null, dashSwipeY = null;
   let dashTut = null; // interactive first-run tutorial state
@@ -1362,6 +1379,8 @@
     dashSpawnGap = 190;
     dashInvincible = 0;
     dashJumpT = 0;
+    dashFocusMeter = DASH_FOCUS_MAX;
+    dashFocusOn = false;
     particles.length = 0;
     heartsEl.style.display = '';
     hearts = DASH_MAX_HITS;
@@ -1379,6 +1398,7 @@
     timerEl.textContent = `${dashMeters()} m`;
     scoreEl.textContent = `${dashScore} pts`;
     starsEl.textContent = progress.dashBest > 0 ? `Best ${progress.dashBest}m` : '';
+    turboFillEl.style.width = `${(dashFocusMeter / DASH_FOCUS_MAX) * 100}%`;
     heartImgs.forEach((img, i) => {
       img.src = i < hearts ? 'assets/heart_full.png' : 'assets/heart_empty.png';
     });
@@ -1394,6 +1414,8 @@
   }
 
   // ---------- Dash tutorial: game freezes, shows the gesture, waits for it ----------
+  // Steps: 0 swipe left · 1 swipe right · 2 jump an obstacle · 3 grab a turbo
+  // boot · 4 hold the ⚡ button for Turbo Focus (world goes slow-mo). Then GO!
   function updateDashTutorial(dt) {
     const T = dashTut;
     const playerY = WORLD_H - 64;
@@ -1411,6 +1433,19 @@
           T.obstacle = { kind: 'obstacle', type: 'stain_poop', lane: dashLane, y: -40 };
           dashObjs.push(T.obstacle);
           T.phase = 'approach';
+        } else if (T.step === 3) {
+          // roll a turbo boot down the lane NEXT DOOR — swipe over and grab it
+          const bootLane = dashLane === 0 ? 1 : dashLane - 1;
+          T.obstacle = { kind: 'pickup', type: 'turbo_shoe', lane: bootLane, y: -40 };
+          dashObjs.push(T.obstacle);
+          T.phase = 'approachBoot';
+        } else if (T.step === 4) {
+          // last lesson: an obstacle rolls in (safe lane) — hold ⚡ to see
+          // the whole world slow down. Turbo Focus!
+          const obLane = dashLane === 0 ? 1 : dashLane - 1;
+          T.obstacle = { kind: 'obstacle', type: 'stain_pee', lane: obLane, y: -40 };
+          dashObjs.push(T.obstacle);
+          T.phase = 'approachFocus';
         } else {
           finishDashTutorial();
         }
@@ -1420,14 +1455,68 @@
       dashScroll += dashSpeed * dt;
       T.obstacle.y += dashSpeed * dt;
       if (T.obstacle.y > playerY - 95) { T.phase = 'prompt'; T.want = 'up'; }
+    } else if (T.phase === 'approachBoot') {
+      dashSpeed = 150;
+      dashScroll += dashSpeed * dt;
+      T.obstacle.y += dashSpeed * dt;
+      if (T.obstacle.y > playerY - 95) {
+        T.phase = 'prompt';
+        T.want = T.obstacle.lane < dashLane ? 'left' : 'right';
+      }
+    } else if (T.phase === 'approachFocus') {
+      dashSpeed = 150;
+      dashScroll += dashSpeed * dt;
+      T.obstacle.y += dashSpeed * dt;
+      if (T.obstacle.y > playerY - 130) { T.phase = 'prompt'; T.want = 'turbo'; }
     } else if (T.phase === 'prompt') {
       dashSpeed = 0; // world frozen until they do the move
+      // Turbo Focus is a HOLD on the ⚡ button, not a swipe — watch for it here.
+      if (T.want === 'turbo' && input.turbo) {
+        AudioFX.powerup();
+        showBanner('TURBO FOCUS! ⚡', '#9fe8a9');
+        T.phase = 'focusClear';
+      }
     } else if (T.phase === 'clear') {
       dashSpeed = 250;
       dashScroll += dashSpeed * dt;
       if (T.obstacle) {
         T.obstacle.y += dashSpeed * dt;
         if (T.obstacle.y > playerY + 70) { T.step = 3; T.t = 0.7; T.phase = 'run'; }
+      }
+    } else if (T.phase === 'clearBoot') {
+      dashSpeed = 250;
+      dashScroll += dashSpeed * dt;
+      if (T.obstacle) {
+        T.obstacle.y += dashSpeed * dt;
+        // scoop it up as it reaches you
+        if (T.obstacle.lane === dashLane && Math.abs(T.obstacle.y - playerY) < 26) {
+          dashFocusMeter = DASH_FOCUS_MAX;
+          AudioFX.powerup();
+          spawnFloatText(dashLaneX(dashLane), playerY - 24, '+TURBO ⚡', '#ffe27a');
+          spawnBurst(dashLaneX(dashLane), playerY, GOLD_SPARK, 12, 60);
+          showBanner('BOOT GRABBED! ⚡', '#9fe8a9');
+          dashObjs = dashObjs.filter((o) => o !== T.obstacle);
+          T.obstacle = null;
+          T.step = 4; T.t = 0.8; T.phase = 'run';
+        } else if (T.obstacle.y > playerY + 70) {
+          // missed it — roll another one
+          T.step = 3; T.t = 0.6; T.phase = 'run';
+          dashObjs = dashObjs.filter((o) => o !== T.obstacle);
+          T.obstacle = null;
+        }
+      }
+    } else if (T.phase === 'focusClear') {
+      // world crawls past in slow motion so they can FEEL the power
+      dashSpeed = 250;
+      const wdt = dt * DASH_FOCUS_SCALE;
+      dashScroll += dashSpeed * wdt;
+      if (T.obstacle) {
+        T.obstacle.y += dashSpeed * wdt;
+        if (T.obstacle.y > playerY + 70) {
+          dashObjs = dashObjs.filter((o) => o !== T.obstacle);
+          T.obstacle = null;
+          T.step = 5; T.t = 0.4; T.phase = 'run';
+        }
       }
     }
     updateDashHud();
@@ -1438,7 +1527,14 @@
     const T = dashTut;
     if (!T) return false;
     if (T.phase !== 'prompt') return true; // ignore inputs mid-run during tutorial
+    if (T.want === 'turbo') return true;   // focus step is a button hold, not a swipe
     if (g !== T.want) return true;         // wrong move — keep waiting
+    if (T.step === 3) { // grabbing the boot
+      dashChangeLane(g === 'right' ? 1 : -1);
+      T.phase = 'clearBoot';
+      showBanner('GO GET IT!', '#9fe8a9');
+      return true;
+    }
     if (g === 'left') { dashChangeLane(-1); T.step = 1; T.phase = 'run'; T.t = 1.1; }
     else if (g === 'right') { dashChangeLane(1); T.step = 2; T.phase = 'run'; T.t = 1.1; }
     else if (g === 'up') { dashJumpT = DASH_JUMP_TIME; AudioFX.powerup(); T.phase = 'clear'; }
@@ -1457,6 +1553,7 @@
     hearts = DASH_MAX_HITS;
     dashSpeed = DASH_START_SPEED;
     dashSpawnGap = 190;
+    dashFocusMeter = DASH_FOCUS_MAX;
     showBanner('GO! GO! GO!', '#ffd23f');
   }
 
@@ -1493,9 +1590,16 @@
   function updateDash(dt) {
     if (dashJumpT > 0) dashJumpT -= dt;
     if (dashTut) { updateDashTutorial(dt); return; }
-    dashSpeed = Math.min(DASH_MAX_SPEED, dashSpeed + DASH_ACCEL * dt);
-    dashScroll += dashSpeed * dt;
-    dashScore += Math.round(dashSpeed * dt * 0.02); // trickle points for distance
+
+    // Turbo Focus: while held (and the meter has juice), the WORLD runs in
+    // slow motion — you keep moving at full speed in your head. Sonic-style.
+    dashFocusOn = input.turbo && dashFocusMeter > 0;
+    if (dashFocusOn) dashFocusMeter = Math.max(0, dashFocusMeter - dt);
+    const wdt = dashFocusOn ? dt * DASH_FOCUS_SCALE : dt; // world time
+
+    dashSpeed = Math.min(DASH_MAX_SPEED, dashSpeed + DASH_ACCEL * wdt);
+    dashScroll += dashSpeed * wdt;
+    dashScore += Math.round(dashSpeed * wdt * 0.02); // trickle points for distance
 
     // Free demo ends right when it's getting fun.
     if (!isPremium() && dashMeters() >= DASH_DEMO_METERS) { endDashDemo(); return; }
@@ -1514,13 +1618,14 @@
 
     if (dashInvincible > 0) dashInvincible -= dt;
 
-    // spawn rows by distance traveled
-    dashSpawnGap -= dashSpeed * dt;
+    // spawn rows by distance traveled — pure dodging now: hazards to avoid,
+    // turbo boots (the ONLY pickup) to keep the focus meter charged.
+    dashSpawnGap -= dashSpeed * wdt;
     if (dashSpawnGap <= 0) {
       dashSpawnGap = randRange(150, 205); // roomier gaps = more reaction time for little thumbs
       const lanes = [0, 1, 2];
       const firstLane = lanes.splice(Math.floor(Math.random() * lanes.length), 1)[0];
-      if (Math.random() < 0.62) {
+      if (Math.random() < 0.72) {
         const r = Math.random();
         dashObjs.push({ kind: 'obstacle', type: r < 0.4 ? 'stain_poop' : (r < 0.8 ? 'stain_pee' : 'cart'), lane: firstLane, y: -40 });
         // sometimes a second obstacle — but never all three lanes
@@ -1529,9 +1634,7 @@
           dashObjs.push({ kind: 'obstacle', type: Math.random() < 0.7 ? 'stain_pee' : 'stain_poop', lane: secondLane, y: -40 });
         }
       } else {
-        const isCandy = Math.random() < 0.55;
-        const toyType = TOY_TYPES[Math.floor(Math.random() * TOY_TYPES.length)];
-        dashObjs.push({ kind: 'pickup', type: isCandy ? 'candy' : toyType, lane: firstLane, y: -40 });
+        dashObjs.push({ kind: 'pickup', type: 'turbo_shoe', lane: firstLane, y: -40 });
       }
     }
 
@@ -1539,16 +1642,16 @@
     const playerY = WORLD_H - 64;
     for (let i = dashObjs.length - 1; i >= 0; i--) {
       const o = dashObjs[i];
-      o.y += dashSpeed * dt;
+      o.y += dashSpeed * wdt;
       if (o.y > WORLD_H + 48) { dashObjs.splice(i, 1); continue; }
       if (o.lane !== dashLane) continue;
       if (Math.abs(o.y - playerY) > 26) continue;
       if (o.kind === 'pickup') {
-        const pts = o.type === 'candy' ? 50 : 25;
-        dashScore += pts;
+        dashFocusMeter = Math.min(DASH_FOCUS_MAX, dashFocusMeter + DASH_BOOT_REFILL);
+        dashScore += 25;
         AudioFX.powerup();
-        spawnFloatText(dashLaneX(o.lane), o.y - 20, `+${pts}`, '#ffe27a');
-        spawnBurst(dashLaneX(o.lane), o.y, GOLD_SPARK, 8, 50);
+        spawnFloatText(dashLaneX(o.lane), o.y - 20, '+TURBO ⚡', '#ffe27a');
+        spawnBurst(dashLaneX(o.lane), o.y, GOLD_SPARK, 10, 55);
         dashObjs.splice(i, 1);
       } else if (dashInvincible <= 0 && dashJumpT <= 0) { // airborne = safely over it
         dashHits++;
@@ -1622,44 +1725,44 @@
       if (o.kind === 'obstacle') {
         const pulse = 0.5 + Math.sin(now / 160) * 0.5; // 0..1
         // soft red danger pool (radial fade, no hard circle edge)
-        const dg = ctx.createRadialGradient(ox, o.y + 6, 2, ox, o.y + 6, 26);
-        dg.addColorStop(0, `rgba(255,60,60,${(0.34 + 0.14 * pulse).toFixed(3)})`);
-        dg.addColorStop(0.65, 'rgba(255,60,60,0.13)');
+        const dg = ctx.createRadialGradient(ox, o.y + 6, 2, ox, o.y + 6, 34);
+        dg.addColorStop(0, `rgba(255,60,60,${(0.38 + 0.16 * pulse).toFixed(3)})`);
+        dg.addColorStop(0.65, 'rgba(255,60,60,0.15)');
         dg.addColorStop(1, 'rgba(255,60,60,0)');
         ctx.fillStyle = dg;
         ctx.beginPath();
-        ctx.ellipse(ox, o.y + 6, 26, 12, 0, 0, Math.PI * 2);
+        ctx.ellipse(ox, o.y + 6, 34, 15, 0, 0, Math.PI * 2);
         ctx.fill();
         // slowly rotating dashed hazard ring
         ctx.save();
         ctx.translate(ox, o.y);
         ctx.rotate(now / 900);
-        ctx.strokeStyle = `rgba(255,120,90,${(0.5 + 0.3 * pulse).toFixed(3)})`;
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = `rgba(255,120,90,${(0.55 + 0.3 * pulse).toFixed(3)})`;
+        ctx.lineWidth = 3;
         ctx.setLineDash([7, 6]);
         ctx.beginPath();
-        ctx.arc(0, 0, 20, 0, Math.PI * 2);
+        ctx.arc(0, 0, 27, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.restore();
-        const size = o.type === 'cart' ? 34 : 28;
+        const size = o.type === 'cart' ? 46 : 40; // BIG — see it coming from far away
         ctx.drawImage(images[o.type], ox - size / 2, o.y - size / 2, size, size);
         // bobbing warning sign overhead
         const wob = Math.sin(now / 180) * 2.5;
         ctx.textAlign = 'center';
-        ctx.font = '14px -apple-system';
-        ctx.fillText('⚠️', ox, o.y - size / 2 - 4 + wob);
+        ctx.font = '17px -apple-system';
+        ctx.fillText('⚠️', ox, o.y - size / 2 - 5 + wob);
         ctx.textAlign = 'left';
       } else {
         const bob = Math.sin((now + o.y) / 160) * 2;
-        // warm golden halo (radial fade)
-        const gg = ctx.createRadialGradient(ox, o.y + bob, 2, ox, o.y + bob, 22);
-        gg.addColorStop(0, 'rgba(255,228,130,0.5)');
-        gg.addColorStop(0.6, 'rgba(255,205,70,0.2)');
+        // warm golden halo (radial fade) — turbo boot, the only pickup
+        const gg = ctx.createRadialGradient(ox, o.y + bob, 2, ox, o.y + bob, 28);
+        gg.addColorStop(0, 'rgba(255,228,130,0.55)');
+        gg.addColorStop(0.6, 'rgba(255,205,70,0.22)');
         gg.addColorStop(1, 'rgba(255,205,70,0)');
         ctx.fillStyle = gg;
         ctx.beginPath();
-        ctx.arc(ox, o.y + bob, 22, 0, Math.PI * 2);
+        ctx.arc(ox, o.y + bob, 28, 0, Math.PI * 2);
         ctx.fill();
         // spinning 4-point sparkle star behind the item
         ctx.save();
@@ -1669,14 +1772,19 @@
         for (let s = 0; s < 4; s++) {
           ctx.rotate(Math.PI / 2);
           ctx.beginPath();
-          ctx.moveTo(0, -17);
-          ctx.lineTo(3, -8);
-          ctx.lineTo(-3, -8);
+          ctx.moveTo(0, -21);
+          ctx.lineTo(3, -10);
+          ctx.lineTo(-3, -10);
           ctx.closePath();
           ctx.fill();
         }
         ctx.restore();
-        ctx.drawImage(images[o.type], ox - 11, o.y - 11 + bob, 22, 22);
+        ctx.drawImage(images[o.type], ox - 15, o.y - 15 + bob, 30, 30);
+        // lightning bolt riding above the boot so it reads as TURBO
+        ctx.textAlign = 'center';
+        ctx.font = '13px -apple-system';
+        ctx.fillText('⚡', ox, o.y + bob - 18);
+        ctx.textAlign = 'left';
         // wandering twinkle
         const tw = Math.floor(now / 260 + o.y) % 3;
         const twx = ox + (tw === 0 ? -14 : tw === 1 ? 13 : 4);
@@ -1719,31 +1827,65 @@
     drawFloatingTexts();
     drawBanner();
 
+    // Turbo Focus: cool blue vignette + rushing speed lines while the world crawls
+    if ((dashFocusOn && gameState === 'dash' && !dashTut) || (dashTut && dashTut.phase === 'focusClear')) {
+      const vg = ctx.createRadialGradient(WORLD_W / 2, WORLD_H / 2, WORLD_H * 0.35, WORLD_W / 2, WORLD_H / 2, WORLD_H * 0.85);
+      vg.addColorStop(0, 'rgba(80,160,255,0)');
+      vg.addColorStop(1, 'rgba(40,90,220,0.28)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(-exL, -exT, WORLD_W + exL * 2, WORLD_H + exT * 2);
+      // vertical speed lines whipping past
+      ctx.strokeStyle = 'rgba(190,220,255,0.5)';
+      ctx.lineWidth = 2;
+      for (let s = 0; s < 8; s++) {
+        const sx = ((s * 73 + now * 0.9) % (WORLD_W + exL * 2)) - exL;
+        const sy = ((now * 1.6 + s * 140) % (WORLD_H + exT * 2)) - exT;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx, sy + 34);
+        ctx.stroke();
+      }
+    }
+
     // tutorial prompt: dark veil + big instruction + animated hand
     if (dashTut && dashTut.phase === 'prompt') {
       ctx.fillStyle = 'rgba(8,9,14,0.55)';
       ctx.fillRect(-exL, -exT, WORLD_W + exL * 2, WORLD_H + exT * 2);
       const w = dashTut.want;
-      const msg = w === 'left' ? 'SWIPE LEFT!' : w === 'right' ? 'SWIPE RIGHT!' : 'SWIPE UP TO JUMP!';
+      const grabbingBoot = dashTut.step === 3;
+      const msg = w === 'turbo' ? 'HOLD ⚡ FOR TURBO FOCUS!'
+        : grabbingBoot ? 'SWIPE TO GRAB THE BOOT!'
+        : w === 'left' ? 'SWIPE LEFT!' : w === 'right' ? 'SWIPE RIGHT!' : 'SWIPE UP TO JUMP!';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '900 30px -apple-system, "Helvetica Neue", sans-serif';
+      ctx.font = '900 28px -apple-system, "Helvetica Neue", sans-serif';
       ctx.lineWidth = 7;
       ctx.strokeStyle = 'rgba(10,8,4,0.95)';
       ctx.strokeText(msg, WORLD_W / 2, WORLD_H / 2 - 56);
       ctx.fillStyle = '#ffe27a';
       ctx.fillText(msg, WORLD_W / 2, WORLD_H / 2 - 56);
-      // animated hand sliding in the gesture direction
       const slide = (Math.sin(now / 300) + 1) / 2; // 0..1
-      let hx = WORLD_W / 2, hy = WORLD_H / 2 + 10;
-      if (w === 'left') hx = WORLD_W / 2 + 50 - slide * 100;
-      else if (w === 'right') hx = WORLD_W / 2 - 50 + slide * 100;
-      else hy = WORLD_H / 2 + 34 - slide * 60;
-      ctx.font = '44px -apple-system';
-      ctx.fillText(w === 'up' ? '\u{261D}\u{FE0F}' : '\u{1F446}', hx, hy);
-      const arrow = w === 'left' ? '\u{2B05}\u{FE0F}' : w === 'right' ? '\u{27A1}\u{FE0F}' : '\u{2B06}\u{FE0F}';
-      ctx.font = '30px -apple-system';
-      ctx.fillText(arrow, WORLD_W / 2, WORLD_H / 2 - 20);
+      if (w === 'turbo') {
+        // pulsing lightning bolt + a hand pressing down toward the ⚡ button
+        ctx.font = `${Math.round(40 + slide * 14)}px -apple-system`;
+        ctx.fillText('⚡', WORLD_W / 2, WORLD_H / 2 - 8);
+        ctx.font = '38px -apple-system';
+        ctx.fillText('\u{1F447}', WORLD_W / 2 + 4, WORLD_H / 2 + 46 + slide * 14);
+        ctx.font = '15px -apple-system';
+        ctx.fillStyle = '#cfe4ff';
+        ctx.fillText('Everything slows down — easy dodging!', WORLD_W / 2, WORLD_H / 2 + 90);
+      } else {
+        // animated hand sliding in the gesture direction
+        let hx = WORLD_W / 2, hy = WORLD_H / 2 + 10;
+        if (w === 'left') hx = WORLD_W / 2 + 50 - slide * 100;
+        else if (w === 'right') hx = WORLD_W / 2 - 50 + slide * 100;
+        else hy = WORLD_H / 2 + 34 - slide * 60;
+        ctx.font = '44px -apple-system';
+        ctx.fillText(w === 'up' ? '\u{261D}\u{FE0F}' : '\u{1F446}', hx, hy);
+        const arrow = w === 'left' ? '\u{2B05}\u{FE0F}' : w === 'right' ? '\u{27A1}\u{FE0F}' : '\u{2B06}\u{FE0F}';
+        ctx.font = '30px -apple-system';
+        ctx.fillText(arrow, WORLD_W / 2, WORLD_H / 2 - 20);
+      }
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
     }
@@ -1779,6 +1921,12 @@
     } else if (gameState === 'paused') {
       togglePause();
     } else if (gameState === 'levelComplete') {
+      // Bonus round only after every 2nd level (endless keeps one per day).
+      if (!endlessMode && !level.bonusAfter) {
+        hideOverlay();
+        advanceStory();
+        return;
+      }
       // First time reaching a bonus round, show the how-to screen. After that
       // it goes straight into the round.
       if (!hasSeenBonusHowto()) {
@@ -1792,13 +1940,7 @@
         startEndlessDay(endlessDay + 1);
         return;
       }
-      const completedIdx = levelIndex;
-      if (completedIdx + 1 < worldNow().levels.length) {
-        startLevel(completedIdx + 1);
-      } else {
-        gameState = 'ending';
-        showEnding();
-      }
+      advanceStory();
     } else if (gameState === 'gameOver') {
       if (endlessMode) {
         endlessMode = false;
@@ -2072,8 +2214,20 @@
       `<span class="rating-stars">${starString(rating)}</span><br>` +
       `Score: ${scoreThisLevel} pts &nbsp;|&nbsp; Accidents: ${accidentsThisLevel}` +
       (rating < 3 ? '<br><small>No accidents + grab the trophy for ★★★</small>' : '<br><small>PERFECT!</small>'),
-      'Clean Up the Yard!'
+      // Backyard bonus comes after every 2nd level; otherwise straight on.
+      level.bonusAfter ? 'Clean Up the Yard!' : 'Next Level ▶'
     );
+  }
+
+  // Story mode: move on after a level (or its bonus round) wraps up.
+  function advanceStory() {
+    const completedIdx = levelIndex;
+    if (completedIdx + 1 < worldNow().levels.length) {
+      startLevel(completedIdx + 1);
+    } else {
+      gameState = 'ending';
+      showEnding();
+    }
   }
 
   // ---------- Update ----------
@@ -2295,17 +2449,22 @@
     if (!t.alertActive && gameState === 'playing') {
       t.nextAlertIn -= dt;
       if (t.nextAlertIn <= 0) {
+        // Fairness: with multiple kids, only ONE can be in crisis at a time.
+        // If another kid is mid-alert, this one holds it a little longer.
+        if (toddlers.some((o) => o !== t && o.alertActive)) {
+          t.nextAlertIn = 1.5 + Math.random() * 1.5;
+          return;
+        }
         t.alertActive = true;
         // Don't keep sending alerts for a goal that's already done — once the
         // poop quota is met, only pees pop up (and vice versa).
-        const peeDone = peesFixedThisLevel >= PEE_QUOTA;
-        const poopDone = poopsFixedThisLevel >= POOP_QUOTA;
+        const peeDone = peesFixedThisLevel >= peeQuota();
+        const poopDone = poopsFixedThisLevel >= poopQuota();
         if (poopDone && !peeDone) t.alertType = 'pee';
         else if (peeDone && !poopDone) t.alertType = 'poop';
         else t.alertType = Math.random() < 0.55 ? 'pee' : 'poop';
-        t.alertTimeRemaining = level.alertTimeLimit
-          + (t.alertType === 'poop' ? POOP_EXTRA_TIME : 0)
-          + (worldNow().twins ? TWINS_ALERT_TIME_BONUS : 0);
+        t.alertTimeRemaining = level.alertTimeLimit * (toddlers.length > 1 ? MULTIKID_TIME_SCALE : 1)
+          + (t.alertType === 'poop' ? POOP_EXTRA_TIME : 0);
         t.jukeTimer = 0;
         t.jukeAngle = 0;
         t.joltTimer = ALERT_JOLT_TIME; // burst away from whoever's tailgating him
@@ -2335,7 +2494,8 @@
         t.alertActive = false;
         t.state = 'wander';
         t.wanderTarget = pickRandomRoomPoint(level.rooms);
-        t.nextAlertIn = mayhemMode ? Infinity : randRange(level.alertMin, level.alertMax);
+        t.nextAlertIn = mayhemMode ? Infinity
+          : randRange(level.alertMin, level.alertMax) * (toddlers.length > 1 ? MULTIKID_SPACING_SCALE : 1);
         if (mayhemMode) {
           // mayhem: misses cost points, not hearts
           scoreThisLevel = Math.max(0, scoreThisLevel - MAYHEM_MISS_PENALTY);
@@ -2416,11 +2576,11 @@
           const isPoop = t.alertType === 'poop';
           if (isPoop) {
             poopSavedRun++;
-            poopsFixedThisLevel = Math.min(POOP_QUOTA, poopsFixedThisLevel + 1);
+            poopsFixedThisLevel = Math.min(poopQuota(), poopsFixedThisLevel + 1);
             awardSticker('first_poop');
           } else {
             peeSavedRun++;
-            peesFixedThisLevel = Math.min(PEE_QUOTA, peesFixedThisLevel + 1);
+            peesFixedThisLevel = Math.min(peeQuota(), peesFixedThisLevel + 1);
             awardSticker('first_pee');
           }
           const timeBonus = Math.round(Math.max(0, t.alertTimeRemaining) * TIME_BONUS_PER_SEC);
@@ -2447,11 +2607,12 @@
           AudioFX.success();
           spawnBurst(sx, sy, GOLD_SPARK, 14, 70);
           spawnFloatText(sx, sy - 18, `+${earned}`, isPoop ? '#ffb37a' : '#ffe27a');
-          t.nextAlertIn = mayhemMode ? Infinity : randRange(level.alertMin, level.alertMax);
+          t.nextAlertIn = mayhemMode ? Infinity
+            : randRange(level.alertMin, level.alertMax) * (toddlers.length > 1 ? MULTIKID_SPACING_SCALE : 1);
           if (mayhemMode) mayhemSaves++;
           updateHud();
           // Level is complete once both goals are met (story/endless only).
-          if (!mayhemMode && peesFixedThisLevel >= PEE_QUOTA && poopsFixedThisLevel >= POOP_QUOTA) {
+          if (!mayhemMode && peesFixedThisLevel >= peeQuota() && poopsFixedThisLevel >= poopQuota()) {
             endLevel();
           }
           break;
