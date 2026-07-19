@@ -403,6 +403,8 @@ canvas#game {
   max-width: 420px;
   max-height: 92vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   color: #fff;
   font-family: -apple-system, "Helvetica Neue", sans-serif;
   text-align: center;
@@ -556,6 +558,8 @@ canvas#game {
   max-width: 420px;
   max-height: 92vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   color: #fff;
   font-family: -apple-system, "Helvetica Neue", sans-serif;
   text-align: center;
@@ -618,6 +622,8 @@ canvas#game {
   max-width: 460px;
   max-height: 92vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   color: #fff;
   font-family: -apple-system, "Helvetica Neue", sans-serif;
   text-align: center;
@@ -716,9 +722,26 @@ canvas#game {
   padding: 20px;
 }
 #sticker-book.hidden { display: none; }
-#sticker-book {
-  touch-action: pan-y; /* allow finger-scrolling here (the game canvas blocks it globally) */
+/* The game canvas blocks touch gestures globally (* { touch-action: none })
+   so the joystick works — but that rule hits EVERY element, including the
+   cards inside these scrollable screens. touch-action doesn't inherit, so
+   the exception must cover the screens AND all their children, or a flick
+   that starts on a sticker card gets eaten and the page never scrolls. */
+#sticker-book, #sticker-book *,
+#howtoplay, #howtoplay *,
+#bonus-howto, #bonus-howto *,
+#level-select, #level-select * {
+  touch-action: pan-y;
 }
+
+/* Exit buttons stay pinned to the bottom of the screen while you scroll —
+   you can always get out, even before scrolling all the way down. */
+#sb-back, #ls-back, #htp-start, #bonus-howto-start {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+}
+
 #sb-box {
   width: 100%;
   max-width: 480px;
