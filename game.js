@@ -13,6 +13,7 @@
   const overlayTitle = document.getElementById('overlay-title');
   const overlayMessage = document.getElementById('overlay-message');
   const overlayButton = document.getElementById('overlay-button');
+  const overlayQuitBtn = document.getElementById('overlay-quit');
   const menuEl = document.getElementById('menu');
   const menuStartBtn = document.getElementById('menu-start');
   const menuIntroBtn = document.getElementById('menu-intro');
@@ -862,6 +863,7 @@
     overlayTitle.textContent = title;
     overlayMessage.innerHTML = message + (extraHtml || '');
     overlayButton.textContent = buttonText;
+    overlayQuitBtn.classList.add('hidden'); // only the pause screen shows Quit
     overlay.classList.remove('hidden');
   }
   function hideOverlay() { overlay.classList.add('hidden'); }
@@ -971,16 +973,28 @@
 
   let pausedFrom = 'playing';
   function togglePause() {
-    if (gameState === 'playing' || gameState === 'bonusRound') {
+    if (gameState === 'playing' || gameState === 'bonusRound' || gameState === 'dash') {
       pausedFrom = gameState;
       gameState = 'paused';
       AudioFX.stopMusic();
       showOverlay('Paused', 'Take a breather — your brother can hold it. Probably.', 'Resume');
+      overlayQuitBtn.classList.remove('hidden');
     } else if (gameState === 'paused') {
       gameState = pausedFrom;
       hideOverlay();
       AudioFX.startMusic();
     }
+  }
+
+  function quitToMenu() {
+    if (gameState !== 'paused') return;
+    mayhemMode = false;
+    endlessMode = false;
+    dashTut = null;
+    heartsEl.style.display = '';
+    particles.length = 0;
+    AudioFX.stopAll();
+    showMenu();
   }
 
   function startBonusRound() {
@@ -1159,7 +1173,7 @@
     dashChampLane = 1;
     dashChampLaneDelay = 0;
     dashObjs = [];
-    dashSpawnGap = 140;
+    dashSpawnGap = 190;
     dashInvincible = 0;
     dashJumpT = 0;
     particles.length = 0;
@@ -1256,7 +1270,7 @@
     dashHits = 0;
     hearts = DASH_MAX_HITS;
     dashSpeed = DASH_START_SPEED;
-    dashSpawnGap = 140;
+    dashSpawnGap = 190;
     showBanner('GO! GO! GO!', '#ffd23f');
   }
 
@@ -1300,7 +1314,7 @@
     // spawn rows by distance traveled
     dashSpawnGap -= dashSpeed * dt;
     if (dashSpawnGap <= 0) {
-      dashSpawnGap = randRange(105, 150);
+      dashSpawnGap = randRange(150, 205); // roomier gaps = more reaction time for little thumbs
       const lanes = [0, 1, 2];
       const firstLane = lanes.splice(Math.floor(Math.random() * lanes.length), 1)[0];
       if (Math.random() < 0.62) {
@@ -1398,30 +1412,75 @@
       }
     }
 
-    // objects — red warning glow under hazards, gold glow under goodies
+    // objects — soft danger markers under hazards, sparkling halos under goodies
     const now = performance.now();
     for (const o of dashObjs) {
       const ox = dashLaneX(o.lane);
       if (o.kind === 'obstacle') {
-        const pulse = 0.5 + Math.sin(now / 150) * 0.2;
-        ctx.fillStyle = `rgba(255,70,70,${(0.22 * pulse + 0.12).toFixed(3)})`;
+        const pulse = 0.5 + Math.sin(now / 160) * 0.5; // 0..1
+        // soft red danger pool (radial fade, no hard circle edge)
+        const dg = ctx.createRadialGradient(ox, o.y + 6, 2, ox, o.y + 6, 26);
+        dg.addColorStop(0, `rgba(255,60,60,${(0.34 + 0.14 * pulse).toFixed(3)})`);
+        dg.addColorStop(0.65, 'rgba(255,60,60,0.13)');
+        dg.addColorStop(1, 'rgba(255,60,60,0)');
+        ctx.fillStyle = dg;
         ctx.beginPath();
-        ctx.ellipse(ox, o.y + 8, 20, 8, 0, 0, Math.PI * 2);
+        ctx.ellipse(ox, o.y + 6, 26, 12, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = `rgba(255,90,90,${(0.45 + 0.25 * pulse).toFixed(3)})`;
-        ctx.lineWidth = 2;
+        // slowly rotating dashed hazard ring
+        ctx.save();
+        ctx.translate(ox, o.y);
+        ctx.rotate(now / 900);
+        ctx.strokeStyle = `rgba(255,120,90,${(0.5 + 0.3 * pulse).toFixed(3)})`;
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([7, 6]);
         ctx.beginPath();
-        ctx.arc(ox, o.y, 19, 0, Math.PI * 2);
+        ctx.arc(0, 0, 20, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
         const size = o.type === 'cart' ? 34 : 28;
         ctx.drawImage(images[o.type], ox - size / 2, o.y - size / 2, size, size);
+        // bobbing warning sign overhead
+        const wob = Math.sin(now / 180) * 2.5;
+        ctx.textAlign = 'center';
+        ctx.font = '14px -apple-system';
+        ctx.fillText('⚠️', ox, o.y - size / 2 - 4 + wob);
+        ctx.textAlign = 'left';
       } else {
         const bob = Math.sin((now + o.y) / 160) * 2;
-        ctx.fillStyle = 'rgba(255,210,63,0.30)';
+        // warm golden halo (radial fade)
+        const gg = ctx.createRadialGradient(ox, o.y + bob, 2, ox, o.y + bob, 22);
+        gg.addColorStop(0, 'rgba(255,228,130,0.5)');
+        gg.addColorStop(0.6, 'rgba(255,205,70,0.2)');
+        gg.addColorStop(1, 'rgba(255,205,70,0)');
+        ctx.fillStyle = gg;
         ctx.beginPath();
-        ctx.ellipse(ox, o.y + 9, 16, 6, 0, 0, Math.PI * 2);
+        ctx.arc(ox, o.y + bob, 22, 0, Math.PI * 2);
         ctx.fill();
+        // spinning 4-point sparkle star behind the item
+        ctx.save();
+        ctx.translate(ox, o.y + bob);
+        ctx.rotate(now / 700);
+        ctx.fillStyle = 'rgba(255,240,170,0.85)';
+        for (let s = 0; s < 4; s++) {
+          ctx.rotate(Math.PI / 2);
+          ctx.beginPath();
+          ctx.moveTo(0, -17);
+          ctx.lineTo(3, -8);
+          ctx.lineTo(-3, -8);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
         ctx.drawImage(images[o.type], ox - 11, o.y - 11 + bob, 22, 22);
+        // wandering twinkle
+        const tw = Math.floor(now / 260 + o.y) % 3;
+        const twx = ox + (tw === 0 ? -14 : tw === 1 ? 13 : 4);
+        const twy = o.y + bob + (tw === 0 ? -8 : tw === 1 ? -12 : 12);
+        ctx.fillStyle = 'rgba(255,255,225,0.95)';
+        ctx.fillRect(twx - 1, twy - 3, 2, 6);
+        ctx.fillRect(twx - 3, twy - 1, 6, 2);
       }
     }
 
@@ -1675,6 +1734,7 @@
     showMenu();
   });
   pauseBtn.addEventListener('click', togglePause);
+  overlayQuitBtn.addEventListener('click', quitToMenu);
   canvas.addEventListener('pointerdown', () => {
     if (gameState === 'intro') finishIntro();
   });
@@ -2707,11 +2767,11 @@
     }
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, (offsetX + shX) * dpr, (offsetY + shY) * dpr);
     if (gameState === 'intro') drawIntro();
-    else if (gameState === 'dash' || gameState === 'dashOver') drawDash();
-    else if (gameState === 'bonusRound' || gameState === 'bonusComplete') drawBonusRound();
+    else if (gameState === 'dash' || gameState === 'dashOver' || (gameState === 'paused' && pausedFrom === 'dash')) drawDash();
+    else if (gameState === 'bonusRound' || gameState === 'bonusComplete' || (gameState === 'paused' && pausedFrom === 'bonusRound')) drawBonusRound();
     else draw();
 
-    pauseBtn.style.display = (gameState === 'playing' || gameState === 'bonusRound') ? 'flex' : 'none';
+    pauseBtn.style.display = (gameState === 'playing' || gameState === 'bonusRound' || gameState === 'dash') ? 'flex' : 'none';
 
     requestAnimationFrame(loop);
   }

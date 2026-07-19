@@ -854,6 +854,20 @@ canvas#game {
   animation: cta-pulse 1.5s ease-in-out infinite;
 }
 
+/* Quit to Menu — quieter secondary button, no pulse */
+#overlay-quit {
+  animation: none !important;
+  margin-top: 2px;
+  padding: 11px 28px;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 26px;
+  border: 2px solid rgba(255,255,255,0.45);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+#overlay-quit.hidden { display: none; }
+
 /* ---- How to Play: 1-2-3 comic strip ---- */
 #htp-steps {
   width: 100%;
