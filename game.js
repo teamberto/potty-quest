@@ -1,5 +1,6 @@
 (() => {
   const canvas = document.getElementById('game');
+  const gameContainerEl = document.getElementById('game-container');
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
 
@@ -40,6 +41,15 @@
   const sbCountEl = document.getElementById('sb-count');
   const sbBackBtn = document.getElementById('sb-back');
   const stickerToastEl = document.getElementById('sticker-toast');
+  const menuUnlockBtn = document.getElementById('menu-unlock');
+  const paywallEl = document.getElementById('paywall');
+  const pwBuyBtn = document.getElementById('pw-buy');
+  const pwRestoreBtn = document.getElementById('pw-restore');
+  const pwCloseBtn = document.getElementById('pw-close');
+  const parentGateEl = document.getElementById('parent-gate');
+  const pgQuestionEl = document.getElementById('pg-question');
+  const pgAnswersEl = document.getElementById('pg-answers');
+  const pgCancelBtn = document.getElementById('pg-cancel');
 
   // ---------- Asset loading ----------
   const SPRITE_NAMES = [
@@ -600,6 +610,7 @@
       p.mayhemBest = p.mayhemBest || 0;
       p.dailyDone = p.dailyDone || '';
       p.dailyTotal = p.dailyTotal || 0;
+      p.premium = !!p.premium;
       return p;
     } catch (e) {
       return { stars: {}, unlocked: { home: true }, stickers: {}, counters: { trophies: 0, candies: 0 }, endlessBest: 0, dashBest: 0, mayhemBest: 0, dailyDone: '', dailyTotal: 0 };
@@ -618,6 +629,10 @@
     if ((a[idx] || 0) < s) { a[idx] = s; saveProgress(); }
   }
   function isWorldUnlocked(w) { return !!progress.unlocked[w.id]; }
+  function isPremium() { return !!progress.premium; }
+  // A world is playable when you've EARNED it (beat the one before) AND —
+  // beyond Home — the one-time unlock has been purchased.
+  function canPlayWorld(w) { return isWorldUnlocked(w) && (w.id === 'home' || isPremium()); }
   function isWorldComplete(w) { return w.levels.every((_, i) => starsFor(w.id, i) > 0); }
   function isWorldPerfect(w) { return w.levels.every((_, i) => starsFor(w.id, i) >= 3); }
   function isLevelPlayable(w, idx) { return idx === 0 || starsFor(w.id, idx - 1) > 0; }
@@ -635,6 +650,7 @@
     { id: 'candy_10', name: 'Candy Guardian', icon: 'candy', hint: 'Snatch 10 candies before Champ.' },
     { id: 'turbo_tamer', name: 'Zoomies Wrangler', icon: 'turbo_shoe', hint: 'Catch Champ mid sugar rush.' },
     { id: 'toy_8', name: 'Toy Tornado', icon: 'toybox', hint: 'Stash 8 toys in one bonus round.' },
+    { id: 'twin_tamer', name: 'Double Trouble', icon: 'little_side_0', hint: 'Zero accidents in a twins level.' },
     { id: 'world_home', name: 'Home Hero', icon: 'potty', hint: 'Clear every Home level.' },
     { id: 'world_park', name: 'Park Ranger', icon: 'tree', hint: 'Clear every Park level.' },
     { id: 'world_store', name: 'Aisle Boss', icon: 'cart', hint: 'Clear every Grocery Store level.' },
@@ -656,6 +672,9 @@
     return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
   }
   function dailyTypeToday() {
+    // Free players always get the story-mode challenge — the other two need
+    // the full Dash/Mayhem modes from the Unlock Everything purchase.
+    if (!isPremium()) return DAILY_TYPES[2]; // 'clean'
     const dayIdx = Math.floor(new Date().setHours(0, 0, 0, 0) / 86400000);
     return DAILY_TYPES[dayIdx % DAILY_TYPES.length];
   }
@@ -698,6 +717,147 @@
     toastQueue.push(st);
     showNextToast();
   }
+  // ---------- Unlock Everything ($3.99 one-time purchase, via RevenueCat) ----------
+  const IAP_PRODUCT_ID = 'com.teamberto.pottychamp.unlock_all';
+  const RC_API_KEY = 'appl_DzkhSMlcqYjSmxIwrNlbVwRiRmD'; // starts with appl_
+  const DASH_DEMO_METERS = 150; // free players run this far, then the pitch
+
+  const Store = (() => {
+    let product = null;
+    let ready = false;
+    function plugin() {
+      const C = window.Capacitor;
+      return (C && C.Plugins && C.Plugins.Purchases) || null;
+    }
+    function ownsPremium(ci) {
+      if (!ci) return false;
+      if (ci.entitlements && ci.entitlements.active && ci.entitlements.active.premium) return true;
+      const ids = ci.allPurchasedProductIdentifiers || [];
+      return ids.indexOf(IAP_PRODUCT_ID) !== -1;
+    }
+    async function init() {
+      const P = plugin();
+      if (!P || RC_API_KEY.indexOf('appl_') !== 0) return; // web preview or key not set yet
+      try {
+        await P.configure({ apiKey: RC_API_KEY });
+        ready = true;
+        try { // already bought on this Apple account? sync it silently
+          const r = await P.getCustomerInfo();
+          if (ownsPremium(r.customerInfo)) grantPremium(true);
+        } catch (e) {}
+        try {
+          const r = await P.getProducts({ productIdentifiers: [IAP_PRODUCT_ID] });
+          if (r && r.products && r.products.length) {
+            product = r.products[0];
+            refreshPriceLabels();
+          }
+        } catch (e) {}
+      } catch (e) {}
+    }
+    async function buy() {
+      const P = plugin();
+      if (!P) { // browser preview: fake purchase so the flow can be tested
+        if (window.confirm('Web preview: pretend the purchase worked?')) grantPremium();
+        return;
+      }
+      if (!ready) { alert('The store is not ready. Check your internet connection and try again.'); return; }
+      try {
+        if (!product) {
+          const r = await P.getProducts({ productIdentifiers: [IAP_PRODUCT_ID] });
+          product = r && r.products && r.products[0];
+        }
+        if (!product) { alert('Could not reach the App Store. Please try again in a minute.'); return; }
+        const r = await P.purchaseStoreProduct({ product });
+        if (ownsPremium(r.customerInfo)) grantPremium();
+      } catch (e) {
+        const msg = ((e && e.message) || '').toLowerCase();
+        if (msg.indexOf('cancel') === -1) alert("The purchase didn't go through. No money was taken.");
+      }
+    }
+    async function restore() {
+      const P = plugin();
+      if (!P) { alert('Restore works inside the phone app.'); return; }
+      if (!ready) { alert('The store is not ready. Check your internet connection and try again.'); return; }
+      try {
+        const r = await P.restorePurchases();
+        if (ownsPremium(r.customerInfo)) grantPremium();
+        else alert('No previous purchase was found on this Apple account.');
+      } catch (e) { alert('Restore failed — please try again.'); }
+    }
+    function priceString() { return (product && product.priceString) || '$3.99'; }
+    return { init, buy, restore, priceString };
+  })();
+
+  function refreshPriceLabels() {
+    const p = Store.priceString();
+    if (pwBuyBtn) pwBuyBtn.textContent = `Unlock Everything — ${p}`;
+    if (menuUnlockBtn && !isPremium()) menuUnlockBtn.innerHTML = `\u{1F513} Unlock Everything — ${p}`;
+  }
+
+  function grantPremium(silent) {
+    if (progress.premium) return;
+    progress.premium = true;
+    saveProgress();
+    if (paywallEl) paywallEl.classList.add('hidden');
+    if (parentGateEl) parentGateEl.classList.add('hidden');
+    if (!silent) {
+      toastQueue.push({
+        icon: 'icon_trophy',
+        title: 'Everything unlocked! \u{1F389}',
+        body: 'Park, Store, School, full Dash, Mayhem — go get ’em!',
+      });
+      showNextToast();
+    }
+    if (gameState === 'menu') showMenu();
+    else if (gameState === 'dashDemoOver') { hideOverlay(); startDash(); } // keep dashing right away!
+  }
+
+  // Parental gate: quick multiplication a 4-year-old can't do. Required by
+  // Apple for purchase flows in kids' games (and just good manners).
+  let pgCorrect = 0;
+  let pgTries = 0;
+  let pgOnPass = null;
+  function openParentalGate(onPass) {
+    pgOnPass = onPass;
+    pgTries = 0;
+    newGateQuestion();
+    parentGateEl.classList.remove('hidden');
+  }
+  function newGateQuestion() {
+    const a = 3 + Math.floor(Math.random() * 6); // 3..8
+    const b = 3 + Math.floor(Math.random() * 6);
+    pgCorrect = a * b;
+    pgQuestionEl.textContent = `${a} × ${b} = ?`;
+    const opts = [pgCorrect];
+    while (opts.length < 4) {
+      const wrong = pgCorrect + (Math.floor(Math.random() * 13) - 6);
+      if (wrong > 0 && wrong !== pgCorrect && opts.indexOf(wrong) === -1) opts.push(wrong);
+    }
+    opts.sort(() => Math.random() - 0.5);
+    pgAnswersEl.innerHTML = '';
+    opts.forEach((n) => {
+      const btn = document.createElement('button');
+      btn.textContent = n;
+      btn.addEventListener('click', () => {
+        if (n === pgCorrect) {
+          parentGateEl.classList.add('hidden');
+          if (pgOnPass) pgOnPass();
+        } else {
+          pgTries++;
+          if (pgTries >= 3) parentGateEl.classList.add('hidden');
+          else newGateQuestion();
+        }
+      });
+      pgAnswersEl.appendChild(btn);
+    });
+  }
+
+  function openPaywall() {
+    refreshPriceLabels();
+    paywallEl.classList.remove('hidden');
+  }
+  function askToUnlock() { openParentalGate(openPaywall); }
+
   const TURBO_MAX = 5;      // seconds of turbo in a full power bar
   function maxTurbo() { return TURBO_MAX + (worldNow().twins ? TWINS_TURBO_BONUS : 0); }
   const TURBO_MULT = 1.6;
@@ -915,14 +1075,26 @@
     }
     // Potty Dash + Potty Mayhem: always playable from the menu.
     if (menuDashBtn) {
-      menuDashBtn.innerHTML = progress.dashBest > 0
-        ? `\u{1F3C3} Potty Dash — Best: ${progress.dashBest} m`
-        : '\u{1F3C3} Potty Dash';
+      if (!isPremium()) {
+        menuDashBtn.innerHTML = '\u{1F3C3} Potty Dash — Free Demo';
+      } else {
+        menuDashBtn.innerHTML = progress.dashBest > 0
+          ? `\u{1F3C3} Potty Dash — Best: ${progress.dashBest} m`
+          : '\u{1F3C3} Potty Dash';
+      }
     }
     if (menuMayhemBtn) {
-      menuMayhemBtn.innerHTML = progress.mayhemBest > 0
-        ? `\u{1F579} Potty Mayhem — Best: ${progress.mayhemBest} pts`
-        : '\u{1F579} Potty Mayhem';
+      if (!isPremium()) {
+        menuMayhemBtn.innerHTML = '\u{1F512} Potty Mayhem';
+      } else {
+        menuMayhemBtn.innerHTML = progress.mayhemBest > 0
+          ? `\u{1F579} Potty Mayhem — Best: ${progress.mayhemBest} pts`
+          : '\u{1F579} Potty Mayhem';
+      }
+    }
+    if (menuUnlockBtn) {
+      menuUnlockBtn.classList.toggle('hidden', isPremium());
+      if (!isPremium()) menuUnlockBtn.innerHTML = `\u{1F513} Unlock Everything — ${Store.priceString()}`;
     }
     if (menuDailyBtn) {
       menuDailyBtn.innerHTML = isDailyDone()
@@ -979,6 +1151,7 @@
       AudioFX.stopMusic();
       showOverlay('Paused', 'Take a breather — your brother can hold it. Probably.', 'Resume');
       overlayQuitBtn.classList.remove('hidden');
+      dashSwipeX = null; dashSwipeY = null; // drop any half-finished swipe
     } else if (gameState === 'paused') {
       gameState = pausedFrom;
       hideOverlay();
@@ -987,10 +1160,23 @@
   }
 
   function quitToMenu() {
-    if (gameState !== 'paused') return;
+    if (gameState !== 'paused' && gameState !== 'dashDemoOver') return;
+    // Bank anything earned this run before leaving — quitting shouldn't
+    // erase a new best distance, sticker, or daily challenge.
+    if (gameState === 'paused' && pausedFrom === 'dash') {
+      const m = dashMeters();
+      if (m > progress.dashBest) { progress.dashBest = m; saveProgress(); }
+      if (m >= DASH_STICKER_M) awardSticker('dash_500');
+      if (m >= 300) completeDaily('dash');
+    } else if (mayhemMode) {
+      if (scoreThisLevel > progress.mayhemBest) { progress.mayhemBest = scoreThisLevel; saveProgress(); }
+      if (mayhemSaves >= 15) awardSticker('mayhem_15');
+      if (mayhemSaves >= 10) completeDaily('mayhem');
+    }
     mayhemMode = false;
     endlessMode = false;
     dashTut = null;
+    dashSwipeX = null; dashSwipeY = null;
     heartsEl.style.display = '';
     particles.length = 0;
     AudioFX.stopAll();
@@ -1274,6 +1460,20 @@
     showBanner('GO! GO! GO!', '#ffd23f');
   }
 
+  function endDashDemo() {
+    gameState = 'dashDemoOver';
+    AudioFX.stopMusic();
+    AudioFX.fanfare();
+    const m = dashMeters();
+    if (m > progress.dashBest) { progress.dashBest = m; saveProgress(); }
+    showOverlay(
+      `WOW — ${m} m! \u{1F3C3}`,
+      `That's the free demo! Unlock Everything to dash as far as your legs can go — plus the Park, Store, School, and Potty Mayhem.`,
+      `\u{1F513} Unlock Everything — ${Store.priceString()}`
+    );
+    overlayQuitBtn.classList.remove('hidden'); // "Quit to Menu" doubles as "not now"
+  }
+
   function endDash() {
     gameState = 'dashOver';
     AudioFX.stopMusic();
@@ -1296,6 +1496,9 @@
     dashSpeed = Math.min(DASH_MAX_SPEED, dashSpeed + DASH_ACCEL * dt);
     dashScroll += dashSpeed * dt;
     dashScore += Math.round(dashSpeed * dt * 0.02); // trickle points for distance
+
+    // Free demo ends right when it's getting fun.
+    if (!isPremium() && dashMeters() >= DASH_DEMO_METERS) { endDashDemo(); return; }
 
     // lane input: keyboard edges (up arrow = jump)
     if (input.left && !dashPrevLeft) dashChangeLane(-1);
@@ -1605,6 +1808,8 @@
       }
     } else if (gameState === 'dashOver') {
       showMenu();
+    } else if (gameState === 'dashDemoOver') {
+      askToUnlock(); // parental gate first, then the paywall
     } else if (gameState === 'mayhemOver') {
       showMenu();
     } else if (gameState === 'ending') {
@@ -1630,14 +1835,14 @@
   function beginRun() {
     for (let wi = 0; wi < WORLDS.length; wi++) {
       const w = WORLDS[wi];
-      if (!isWorldUnlocked(w)) break;
+      if (!canPlayWorld(w)) break;
       for (let li = 0; li < w.levels.length; li++) {
         if (starsFor(w.id, li) === 0) { startRunAt(wi, li); return; }
       }
     }
-    // Everything cleared — replay the last unlocked world from the top.
+    // Everything cleared — replay the last playable world from the top.
     let lastUnlocked = 0;
-    WORLDS.forEach((w, i) => { if (isWorldUnlocked(w)) lastUnlocked = i; });
+    WORLDS.forEach((w, i) => { if (canPlayWorld(w)) lastUnlocked = i; });
     startRunAt(lastUnlocked, 0);
   }
 
@@ -1647,7 +1852,7 @@
     hideMenu();
     // default tab: furthest unlocked world
     lsWorldIdx = 0;
-    WORLDS.forEach((w, i) => { if (isWorldUnlocked(w)) lsWorldIdx = i; });
+    WORLDS.forEach((w, i) => { if (canPlayWorld(w)) lsWorldIdx = i; });
     renderLevelSelect();
     levelSelectEl.classList.remove('hidden');
   }
@@ -1656,14 +1861,16 @@
     lsLevelsEl.innerHTML = '';
     WORLDS.forEach((w, wi) => {
       const b = document.createElement('button');
-      const unlocked = isWorldUnlocked(w);
-      b.className = 'ls-world' + (wi === lsWorldIdx ? ' active' : '') + (unlocked ? '' : ' locked');
-      b.textContent = unlocked ? w.label : `\u{1F512} ${w.label}`;
-      if (unlocked) b.addEventListener('click', () => { lsWorldIdx = wi; renderLevelSelect(); });
+      const earned = isWorldUnlocked(w);          // beat the world before it
+      const playable = canPlayWorld(w);           // earned AND (home or purchased)
+      b.className = 'ls-world' + (wi === lsWorldIdx ? ' active' : '') + (playable ? '' : ' locked');
+      b.textContent = playable ? w.label : `\u{1F512} ${w.label}`;
+      if (playable) b.addEventListener('click', () => { lsWorldIdx = wi; renderLevelSelect(); });
+      else if (earned) b.addEventListener('click', askToUnlock); // earned it — just needs the unlock
       lsWorldsEl.appendChild(b);
     });
     const w = WORLDS[lsWorldIdx];
-    if (!isWorldUnlocked(w)) return;
+    if (!canPlayWorld(w)) return;
     w.levels.forEach((lv, li) => {
       const b = document.createElement('button');
       const earned = starsFor(w.id, li);
@@ -1675,12 +1882,14 @@
       if (playable) b.addEventListener('click', () => startRunAt(lsWorldIdx, li));
       lsLevelsEl.appendChild(b);
     });
-    const prev = lsWorldIdx > 0 ? WORLDS[lsWorldIdx - 1] : null;
-    lsHintEl.textContent = isWorldUnlocked(w)
-      ? (lsWorldIdx + 1 < WORLDS.length && !isWorldUnlocked(WORLDS[lsWorldIdx + 1])
-        ? `Clear all 5 levels to unlock ${WORLDS[lsWorldIdx + 1].label}!`
-        : '')
-      : `Clear ${prev ? prev.label : 'the previous world'} to unlock!`;
+    const next = lsWorldIdx + 1 < WORLDS.length ? WORLDS[lsWorldIdx + 1] : null;
+    if (next && isWorldUnlocked(next) && !canPlayWorld(next)) {
+      lsHintEl.textContent = `You earned ${next.label}! Unlock Everything to play it.`;
+    } else if (next && !isWorldUnlocked(next)) {
+      lsHintEl.textContent = `Clear all 5 levels to unlock ${next.label}!`;
+    } else {
+      lsHintEl.textContent = '';
+    }
   }
   let tutorialOpenedFromMenu = false;
   menuStartBtn.addEventListener('click', () => {
@@ -1717,7 +1926,10 @@
   if (menuLevelsBtn) menuLevelsBtn.addEventListener('click', openLevelSelect);
   if (menuEndlessBtn) menuEndlessBtn.addEventListener('click', startEndlessRun);
   if (menuDashBtn) menuDashBtn.addEventListener('click', startDash);
-  if (menuMayhemBtn) menuMayhemBtn.addEventListener('click', startMayhem);
+  if (menuMayhemBtn) menuMayhemBtn.addEventListener('click', () => {
+    if (!isPremium()) { askToUnlock(); return; }
+    startMayhem();
+  });
   if (menuDailyBtn) menuDailyBtn.addEventListener('click', () => {
     const ty = dailyTypeToday().id;
     if (ty === 'dash') startDash();
@@ -1735,6 +1947,11 @@
   });
   pauseBtn.addEventListener('click', togglePause);
   overlayQuitBtn.addEventListener('click', quitToMenu);
+  if (menuUnlockBtn) menuUnlockBtn.addEventListener('click', askToUnlock);
+  if (pwBuyBtn) pwBuyBtn.addEventListener('click', () => Store.buy());
+  if (pwRestoreBtn) pwRestoreBtn.addEventListener('click', () => Store.restore());
+  if (pwCloseBtn) pwCloseBtn.addEventListener('click', () => paywallEl.classList.add('hidden'));
+  if (pgCancelBtn) pgCancelBtn.addEventListener('click', () => parentGateEl.classList.add('hidden'));
   canvas.addEventListener('pointerdown', () => {
     if (gameState === 'intro') finishIntro();
   });
@@ -1759,7 +1976,9 @@
           progress.unlocked[next.id] = true;
           saveProgress();
         }
-        unlockHtml = `<br>\u{1F513} <strong>NEW LOCATION UNLOCKED: ${next.label}!</strong>`;
+        unlockHtml = isPremium()
+          ? `<br>\u{1F513} <strong>NEW LOCATION UNLOCKED: ${next.label}!</strong>`
+          : `<br>\u{1F513} <strong>You earned ${next.label}!</strong> Unlock Everything (${Store.priceString()}) to play it!`;
       } else if (worldNow().id === 'school') {
         unlockHtml = `<br>\u{267E}\u{FE0F} <strong>ENDLESS MODE UNLOCKED!</strong>`;
       }
@@ -2772,6 +2991,10 @@
     else draw();
 
     pauseBtn.style.display = (gameState === 'playing' || gameState === 'bonusRound' || gameState === 'dash') ? 'flex' : 'none';
+    // Hide the HUD + touch controls on non-game screens (menu, intro, splash,
+    // ending) so they don't bleed through the menu or sticker book.
+    const onGameScreen = gameState !== 'splash' && gameState !== 'intro' && gameState !== 'menu' && gameState !== 'ending';
+    gameContainerEl.classList.toggle('ui-hidden', !onGameScreen);
 
     requestAnimationFrame(loop);
   }
@@ -2780,6 +3003,7 @@
   // tracking. Monetization can be added back in a future update.
 
   resize();
+  Store.init(); // connects to the App Store in the background (no-op on web)
   loadAssets(() => {
     showOverlay(
       'Potty Champ',

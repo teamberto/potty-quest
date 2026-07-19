@@ -137,6 +137,15 @@ canvas#game {
 }
 #btn-pause:active { background: rgba(255,255,255,0.4); }
 
+/* On menu/intro/splash screens, hide gameplay UI entirely so it can't
+   bleed through the menu, sticker book, or how-to overlays. */
+#game-container.ui-hidden #hud,
+#game-container.ui-hidden #hearts,
+#game-container.ui-hidden #controls,
+#game-container.ui-hidden #turbo-wrap {
+  display: none;
+}
+
 #menu {
   position: absolute;
   inset: 0;
@@ -1038,4 +1047,144 @@ canvas#game {
 #parent-gate-submit {
   background: #ffc400;
   color: #1a1a1a;
+}
+
+/* ---- Parental gate (new pg-* layout) ---- */
+#pg-box {
+  background: #1c1230;
+  border: 1px solid rgba(255,196,0,0.35);
+  border-radius: 20px;
+  padding: 24px 22px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  color: #fff;
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+}
+#pg-box h1 { font-size: 22px; font-weight: 900; color: #ffe27a; margin-bottom: 6px; }
+#pg-box p { font-size: 14px; opacity: 0.85; line-height: 1.4; }
+#pg-question { font-size: 30px !important; font-weight: 900; color: #ffe27a; opacity: 1 !important; margin: 10px 0; }
+#pg-answers { display: flex; justify-content: center; gap: 10px; margin: 12px 0 14px; }
+#pg-answers button {
+  min-width: 58px;
+  padding: 12px 10px;
+  font-size: 20px;
+  font-weight: 800;
+  border-radius: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  -webkit-tap-highlight-color: transparent;
+}
+#pg-answers button:active { background: rgba(255,196,0,0.35); }
+#pg-cancel {
+  padding: 9px 22px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: transparent;
+  color: #fff;
+}
+
+/* ---- Paywall ---- */
+#paywall {
+  position: absolute;
+  inset: 0;
+  z-index: 22;
+  background: rgba(6,7,12,0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+#paywall.hidden { display: none; }
+#pw-box {
+  background: linear-gradient(180deg, #241640, #170f2b);
+  border: 2px solid rgba(255,196,0,0.55);
+  border-radius: 22px;
+  padding: 20px 22px;
+  max-width: 420px;
+  width: 100%;
+  max-height: 94vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  text-align: center;
+  color: #fff;
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+#pw-box h1 {
+  font-size: 26px;
+  font-weight: 900;
+  background: linear-gradient(180deg, #ffe27a, #ff9d00);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.pw-sub { font-size: 13px; color: #9fe8a9; font-weight: 700; }
+.pw-list { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.pw-item {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+}
+#pw-buy {
+  width: 100%;
+  padding: 15px 20px;
+  font-size: 19px;
+  font-weight: 900;
+  border-radius: 30px;
+  border: none;
+  background: linear-gradient(180deg, #ffe27a, #ffc400);
+  color: #1a1a1a;
+  box-shadow: 0 6px 22px rgba(255,196,0,0.45);
+  animation: cta-pulse 1.5s ease-in-out infinite;
+  -webkit-tap-highlight-color: transparent;
+}
+#pw-restore {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: transparent;
+  color: #fff;
+}
+#pw-close {
+  padding: 6px 16px;
+  font-size: 13px;
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,0.6);
+}
+
+/* menu unlock button: solid gold, stands out from the outlined mode buttons */
+#menu-unlock {
+  min-width: 320px;
+  padding: 14px 36px;
+  font-size: 18px;
+  font-weight: 900;
+  border-radius: 30px;
+  border: none;
+  background: linear-gradient(180deg, #ffe27a, #ffc400);
+  color: #1a1a1a;
+  box-shadow: 0 6px 22px rgba(255,196,0,0.4);
+  -webkit-tap-highlight-color: transparent;
+}
+#menu-unlock:active { transform: scale(0.96); }
+#menu-unlock.hidden { display: none; }
+
+/* let fingers scroll + tap normally inside the new overlays */
+#paywall, #paywall *,
+#parent-gate, #parent-gate * {
+  touch-action: pan-y;
 }
