@@ -210,7 +210,7 @@ canvas#game {
 #menu-start:active { transform: scale(0.96); }
 
 /* Mode buttons: same hero treatment as Story, gold-outline variant */
-#menu-levels, #menu-dash, #menu-mayhem, #menu-daily, #menu-endless, #menu-stickers {
+#menu-levels, #menu-dash, #menu-mayhem, #menu-daily, #menu-gift, #menu-cap, #menu-endless, #menu-stickers {
   min-width: 320px;
   padding: 14px 36px;
   font-size: 18px;
@@ -222,12 +222,24 @@ canvas#game {
   box-shadow: 0 4px 16px rgba(255,196,0,0.22);
   -webkit-tap-highlight-color: transparent;
 }
-#menu-levels:active, #menu-dash:active, #menu-mayhem:active,
-#menu-daily:active, #menu-endless:active, #menu-stickers:active {
+#menu-levels:active, #menu-dash:active, #menu-mayhem:active, #menu-gift:active,
+#menu-cap:active, #menu-daily:active, #menu-endless:active, #menu-stickers:active {
   transform: scale(0.96);
   background: rgba(255,196,0,0.28);
 }
-#menu-endless.hidden, #menu-dash.hidden { display: none; }
+#menu-endless.hidden, #menu-dash.hidden, #menu-cap.hidden { display: none; }
+
+/* Daily Surprise: pink present treatment; dims once opened for the day */
+#menu-gift {
+  border-color: #ff6fae;
+  background: linear-gradient(180deg, rgba(255,111,174,0.20), rgba(255,60,130,0.12));
+  color: #ffc2dd;
+  box-shadow: 0 4px 16px rgba(255,111,174,0.25);
+}
+#menu-gift.opened {
+  opacity: 0.55;
+  box-shadow: none;
+}
 
 #menu-highscore {
   font-size: 17px;
@@ -713,10 +725,21 @@ canvas#game {
 #ls-back:active { transform: scale(0.96); }
 
 .rating-stars {
-  font-size: 30px;
+  font-size: 34px;
   color: #ffe27a;
   letter-spacing: 4px;
   text-shadow: 0 2px 8px rgba(255,196,0,0.4);
+}
+/* Stars slam in one at a time on the level-complete screen */
+.rating-stars .star-pop {
+  display: inline-block;
+  opacity: 0;
+  transform: scale(0);
+  animation: starPop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) forwards;
+}
+@keyframes starPop {
+  0% { opacity: 0; transform: scale(0) rotate(-40deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
 }
 
 /* ---- Sticker book ---- */

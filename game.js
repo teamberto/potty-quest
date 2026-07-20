@@ -42,6 +42,8 @@
   const sbBackBtn = document.getElementById('sb-back');
   const stickerToastEl = document.getElementById('sticker-toast');
   const menuUnlockBtn = document.getElementById('menu-unlock');
+  const menuGiftBtn = document.getElementById('menu-gift');
+  const menuCapBtn = document.getElementById('menu-cap');
   const paywallEl = document.getElementById('paywall');
   const pwBuyBtn = document.getElementById('pw-buy');
   const pwRestoreBtn = document.getElementById('pw-restore');
@@ -536,7 +538,9 @@
   let scoreTotal = 0;
   let hearts = 3;
   let stains = [];
-  let gameState = 'splash'; // splash | intro | menu | playing | paused | levelComplete | bonusRound | bonusComplete | ending
+  let celebrateTimer = 0;   // level-complete confetti shower
+  let celebrateTick = 0;
+  let gameState = 'splash'; // splash | intro | menu | playing | paused | levelComplete | bonusRound | bonusComplete | gift | giftOpen | ending
   let animClock = 0;
   let introTime = 0;
   let introSavedBurst = false;
@@ -618,14 +622,86 @@
       p.dailyDone = p.dailyDone || '';
       p.dailyTotal = p.dailyTotal || 0;
       p.premium = !!p.premium;
+      p.capColor = p.capColor || 'red';
+      p.caps = Object.assign({ red: true }, p.caps || {});
+      p.giftDay = p.giftDay || '';
       return p;
     } catch (e) {
-      return { stars: {}, unlocked: { home: true }, stickers: {}, counters: { trophies: 0, candies: 0 }, endlessBest: 0, dashBest: 0, mayhemBest: 0, dailyDone: '', dailyTotal: 0 };
+      return { stars: {}, unlocked: { home: true }, stickers: {}, counters: { trophies: 0, candies: 0 }, endlessBest: 0, dashBest: 0, mayhemBest: 0, dailyDone: '', dailyTotal: 0, capColor: 'red', caps: { red: true }, giftDay: '' };
     }
   }
   const progress = loadProgress();
   function saveProgress() {
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch (e) {}
+  }
+
+  // ---------- Characters have names — kids bond with names ----------
+  const KID_NAME = 'Champ';     // little bro — the one who needs the potty
+  const BIG_NAME = 'Captain';   // big brother — the one doing the chasing
+  // (the playdate friend has no name — just the teal cap)
+
+  // ---------- Cap colors (cosmetics — unlocked via the Daily Surprise) ----------
+  // Baby Champ's backwards cap can be recolored. The playdate friend always
+  // wears teal so you can tell the kids apart at a glance.
+  const CAP_SRC = [[224, 49, 49], [245, 95, 85], [168, 30, 30]]; // red art: dome, highlight, brim
+  const CAP_COLORS = {
+    red:    null, // original art, no tint pass needed
+    blue:   [[52, 120, 246], [110, 165, 255], [30, 80, 190]],
+    green:  [[46, 160, 67], [96, 200, 110], [25, 110, 45]],
+    purple: [[150, 70, 220], [185, 120, 245], [105, 40, 165]],
+    gold:   [[255, 180, 20], [255, 220, 90], [200, 130, 10]],
+    teal:   [[24, 170, 170], [80, 210, 205], [12, 120, 120]], // playdate friend only
+  };
+  const CAP_LABELS = { red: 'Red', blue: 'Blue', green: 'Green', purple: 'Purple', gold: 'GOLD ⭐' };
+  const capCache = {};
+  function capSprite(key, color) {
+    if (!CAP_COLORS[color]) return images[key]; // red = untouched art
+    const ck = key + '_' + color;
+    if (capCache[ck]) return capCache[ck];
+    const src = images[key];
+    if (!src) return src;
+    const cv = document.createElement('canvas');
+    cv.width = src.width; cv.height = src.height;
+    const c2 = cv.getContext('2d');
+    c2.drawImage(src, 0, 0);
+    const id = c2.getImageData(0, 0, cv.width, cv.height);
+    const d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      for (let s = 0; s < 3; s++) {
+        if (d[i] === CAP_SRC[s][0] && d[i + 1] === CAP_SRC[s][1] && d[i + 2] === CAP_SRC[s][2]) {
+          const t = CAP_COLORS[color][s];
+          d[i] = t[0]; d[i + 1] = t[1]; d[i + 2] = t[2];
+          break;
+        }
+      }
+    }
+    c2.putImageData(id, 0, 0);
+    capCache[ck] = cv;
+    return cv;
+  }
+  function ownedCaps() {
+    return Object.keys(CAP_LABELS).filter((c) => progress.caps[c]);
+  }
+
+  // ---------- Daily Surprise (one present a day — ritual, not pressure) ----------
+  function giftOpenedToday() { return progress.giftDay === todayKey(); }
+  function openDailyGift() {
+    progress.giftDay = todayKey();
+    const locked = Object.keys(CAP_LABELS).filter((c) => !progress.caps[c]);
+    let msg;
+    if (locked.length) {
+      const c = locked[Math.floor(Math.random() * locked.length)];
+      progress.caps[c] = true;
+      progress.capColor = c;
+      msg = `A new cap color: <strong>${CAP_LABELS[c]}</strong>! \u{1F9E2}<br><small>${KID_NAME} is wearing it right now!</small>`;
+    } else {
+      progress.counters.candies += 3;
+      msg = `3 candies for the candy jar! \u{1F36C}<br><small>Candy total: ${progress.counters.candies}</small>`;
+    }
+    saveProgress();
+    AudioFX.fanfare();
+    gameState = 'giftOpen';
+    showOverlay('\u{1F389} TA-DA!', msg, 'Awesome!');
   }
   function starsFor(worldId, idx) {
     const a = progress.stars[worldId] || [];
@@ -1026,7 +1102,7 @@
     gameState = 'playing';
     hideOverlay();
     AudioFX.startMusic();
-    if (level.playdate) showBanner('\u{1F476}\u{1F476} PLAYDATE!', '#ffd23f');
+    if (level.playdate) showBanner('\u{1F476}\u{1F476} A FRIEND’S HERE — PLAYDATE!', '#ffd23f');
   }
 
   function showOverlay(title, message, buttonText, extraHtml) {
@@ -1113,6 +1189,17 @@
     }
     if (menuStickersBtn) {
       menuStickersBtn.innerHTML = `\u{1F4D6} Sticker Book (${stickerCount()}/${STICKERS.length})`;
+    }
+    if (menuGiftBtn) {
+      menuGiftBtn.innerHTML = giftOpenedToday()
+        ? '\u{1F381} Surprise opened — back tomorrow!'
+        : '\u{1F381} Daily Surprise!';
+      menuGiftBtn.classList.toggle('opened', giftOpenedToday());
+    }
+    if (menuCapBtn) {
+      // only worth showing once there's a choice to make
+      menuCapBtn.classList.toggle('hidden', ownedCaps().length < 2);
+      menuCapBtn.innerHTML = `\u{1F9E2} ${KID_NAME}'s Cap: ${CAP_LABELS[progress.capColor] || 'Red'}`;
     }
     menuEl.classList.remove('hidden');
   }
@@ -1954,6 +2041,11 @@
       askToUnlock(); // parental gate first, then the paywall
     } else if (gameState === 'mayhemOver') {
       showMenu();
+    } else if (gameState === 'gift') {
+      openDailyGift();
+    } else if (gameState === 'giftOpen') {
+      hideOverlay();
+      showMenu();
     } else if (gameState === 'ending') {
       showMenu();
     }
@@ -2079,6 +2171,21 @@
     else beginRun();
   });
   if (menuStickersBtn) menuStickersBtn.addEventListener('click', openStickerBook);
+  if (menuGiftBtn) menuGiftBtn.addEventListener('click', () => {
+    if (giftOpenedToday()) return;
+    hideMenu();
+    gameState = 'gift';
+    showOverlay('\u{1F381} A present for you!', 'Something special is inside…', 'Open it!');
+  });
+  if (menuCapBtn) menuCapBtn.addEventListener('click', () => {
+    const owned = ownedCaps();
+    if (owned.length < 2) return;
+    const i = owned.indexOf(progress.capColor);
+    progress.capColor = owned[(i + 1) % owned.length];
+    saveProgress();
+    menuCapBtn.innerHTML = `\u{1F9E2} ${KID_NAME}'s Cap: ${CAP_LABELS[progress.capColor]}`;
+    AudioFX.catch();
+  });
   if (sbBackBtn) sbBackBtn.addEventListener('click', () => {
     stickerBookEl.classList.add('hidden');
     showMenu();
@@ -2209,11 +2316,32 @@
     if (rating === 3) awardSticker('three_star');
     if (isWorldPerfect(worldNow())) awardSticker('star_student');
     if (accidentsThisLevel === 0) completeDaily('clean');
+
+    // Confetti keeps popping behind the overlay — the win screen IS the game.
+    celebrateTimer = rating === 3 ? 4 : 2.5;
+    celebrateTick = 0;
+
+    // Stars slam in one at a time (CSS pop animation, staggered).
+    const starsHtml = starString(rating).split('').map((s, i) =>
+      `<span class="star-pop" style="animation-delay:${(0.15 + i * 0.3).toFixed(2)}s">${s}</span>`).join('');
+
+    // Tease what's next so they beg for one more level (tomorrow counts too).
+    let tease = '';
+    const next = worldNow().levels[levelIndex + 1];
+    const nextWorld = WORLDS[worldIndex + 1];
+    if (next) {
+      tease = `<br><small>Next up: ${next.label}` +
+        (next.kids > 1 && !(level.kids > 1) ? ' \u{1F476}\u{1F476} PLAYDATE!' : '') + '</small>';
+    } else if (nextWorld) {
+      tease = `<br><small>Next up: ${nextWorld.label}! \u{1F31F}</small>`;
+    }
+
     showOverlay(
-      `${level.label} complete!`,
-      `<span class="rating-stars">${starString(rating)}</span><br>` +
+      rating === 3 ? '\u{2B50} PERFECT! POTTY CHAMP! \u{1F3C6}' : `${level.label} complete!`,
+      `<span class="rating-stars">${starsHtml}</span><br>` +
       `Score: ${scoreThisLevel} pts &nbsp;|&nbsp; Accidents: ${accidentsThisLevel}` +
-      (rating < 3 ? '<br><small>No accidents + grab the trophy for ★★★</small>' : '<br><small>PERFECT!</small>'),
+      (rating < 3 ? '<br><small>No accidents + grab the trophy for ★★★</small>' : '') +
+      tease,
       // Backyard bonus comes after every 2nd level; otherwise straight on.
       level.bonusAfter ? 'Clean Up the Yard!' : 'Next Level ▶'
     );
@@ -2888,6 +3016,15 @@
     }
     if (gameState === 'dash') { updateDash(dt); return; }
     if (gameState === 'bonusRound') { updateBonusRound(dt); return; }
+    // Level-complete celebration: confetti bursts keep landing behind the overlay.
+    if (gameState === 'levelComplete' && celebrateTimer > 0) {
+      celebrateTimer -= dt;
+      celebrateTick -= dt;
+      if (celebrateTick <= 0) {
+        celebrateTick = 0.32;
+        spawnBurst(randRange(50, WORLD_W - 50), randRange(40, WORLD_H * 0.65), GOLD_SPARK, 12, 75);
+      }
+    }
     if (gameState !== 'playing') { updateParticles(dt); updateFloatingTexts(dt); return; }
     updatePlayer(dt);
     if (mayhemMode) {
@@ -2905,6 +3042,7 @@
     updateCandy(dt);
     updateMop(dt);
     updateCleanup(dt);
+    updateDuck(dt);
     updateParticles(dt);
     updateFloatingTexts(dt);
 
@@ -2954,11 +3092,13 @@
   function drawCharacter(entity, prefix) {
     const moving = entity.moving;
     const frame = moving ? (Math.floor(performance.now() / 180) % 2) : 0;
-    let img;
-    if (entity.facing === 'left' || entity.facing === 'right') {
-      img = images[`${prefix}_side_${frame}`];
-    } else {
-      img = images[`${prefix}_${entity.facing}_${frame}`];
+    const key = (entity.facing === 'left' || entity.facing === 'right')
+      ? `${prefix}_side_${frame}`
+      : `${prefix}_${entity.facing}_${frame}`;
+    let img = images[key];
+    if (prefix === 'little') {
+      // Champ wears whatever cap color is picked; the playdate friend is always teal.
+      img = capSprite(key, entity.isTwin ? 'teal' : (progress.capColor || 'red'));
     }
     ctx.save();
     if (entity.facing === 'left') {
@@ -2993,6 +3133,29 @@
     if (blink) return;
     const bob = Math.sin(performance.now() / 220) * 2;
     ctx.drawImage(images.icon_trophy, trophy.x - 8, trophy.y - 8 + bob, 16, 16);
+  }
+
+  // ---------- Rubber duck easter egg (Home bathroom — walk into it!) ----------
+  const duck = { tx: 2.5, ty: 10, quackT: 0, cool: 0 };
+  function updateDuck(dt) {
+    if (worldNow().id !== 'home' || mayhemMode) return;
+    if (duck.cool > 0) duck.cool -= dt;
+    if (duck.quackT > 0) duck.quackT -= dt;
+    const dx = duck.tx * TILE - (player.x + player.w / 2);
+    const dy = duck.ty * TILE - (player.y + player.h / 2);
+    if (duck.cool <= 0 && Math.hypot(dx, dy) < 22) {
+      duck.cool = 2.5;
+      duck.quackT = 0.7;
+      AudioFX.catch();
+      spawnFloatText(duck.tx * TILE, duck.ty * TILE - 16, 'QUACK!', '#ffe27a');
+      spawnBurst(duck.tx * TILE, duck.ty * TILE, PUFF_WHITE, 5, 40);
+    }
+  }
+  function drawDuck() {
+    if (worldNow().id !== 'home' || mayhemMode) return;
+    const hop = duck.quackT > 0 ? Math.abs(Math.sin(duck.quackT * 14)) * 5 : 0;
+    ctx.font = '15px -apple-system';
+    ctx.fillText('\u{1F986}', duck.tx * TILE - 8, duck.ty * TILE + 6 - hop);
   }
 
   function drawMopSpot() {
@@ -3036,6 +3199,7 @@
     drawCandy();
     drawTrophy();
     drawMopSpot();
+    drawDuck();
 
     // depth-sorted furniture + characters
     const drawables = [];
@@ -3065,12 +3229,8 @@
     for (const d of drawables) {
       if (d.custom === 'player') drawCharacter(player, 'big');
       else if (d.custom === 'toddler') {
+        // The friend's teal cap (via capSprite) is how you tell the kids apart.
         drawCharacter(d.toddlerRef, 'little');
-        if (d.toddlerRef.isTwin) {
-          // little green cap band so you can tell the twins apart
-          ctx.fillStyle = '#3fae5a';
-          ctx.fillRect(d.toddlerRef.x + 7, d.toddlerRef.y + 3, 10, 3);
-        }
       }
       else ctx.drawImage(d.img, d.x, d.y);
     }
@@ -3154,7 +3314,8 @@
     pauseBtn.style.display = (gameState === 'playing' || gameState === 'bonusRound' || gameState === 'dash') ? 'flex' : 'none';
     // Hide the HUD + touch controls on non-game screens (menu, intro, splash,
     // ending) so they don't bleed through the menu or sticker book.
-    const onGameScreen = gameState !== 'splash' && gameState !== 'intro' && gameState !== 'menu' && gameState !== 'ending';
+    const onGameScreen = gameState !== 'splash' && gameState !== 'intro' && gameState !== 'menu'
+      && gameState !== 'ending' && gameState !== 'gift' && gameState !== 'giftOpen';
     gameContainerEl.classList.toggle('ui-hidden', !onGameScreen);
 
     requestAnimationFrame(loop);
@@ -3168,7 +3329,7 @@
   loadAssets(() => {
     showOverlay(
       'Potty Champ',
-      'The ultimate potty-training rescue mission.',
+      `Help ${BIG_NAME} catch ${KID_NAME} before it's too late!`,
       'Tap to Begin',
       '<div class="splash-chars"><img src="assets/big_down_0.png" alt=""><img src="assets/little_down_0.png" alt=""></div>'
     );
