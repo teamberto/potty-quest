@@ -321,7 +321,16 @@ canvas#game {
 
 /* Art teasers — a glance tells a pre-reader where the button goes */
 #menu-levels  { background-image: url('assets/door.png'); }
-#menu-dash    { background-image: url('assets/turbo_shoe.png'); }
+/* Dash: the lightning shoe still sits in the corner, but now over a road that
+   runs off to a vanishing point at the top of the tile. */
+#menu-dash {
+  background-image: url('assets/turbo_shoe.png'), url('assets/road.png');
+  background-size: 54px 54px, 100% 100%;
+  background-position: right -8px bottom -8px, center center;
+  background-repeat: no-repeat, no-repeat;
+}
+#menu-dash .tile-name,
+#menu-dash .tile-sub { text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
 /* Mayhem: a whole crowd of Champs, not one icon — the tile should feel busy */
 #menu-mayhem { background-image: none; }
 #menu-mayhem::after {
