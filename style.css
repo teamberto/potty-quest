@@ -156,8 +156,8 @@ canvas#game {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  padding-top: max(34px, calc(env(safe-area-inset-top) + 18px));
+  gap: 10px;
+  padding-top: max(28px, calc(env(safe-area-inset-top) + 14px));
   padding-left: max(20px, env(safe-area-inset-left));
   padding-right: max(20px, env(safe-area-inset-right));
   padding-bottom: 44px;
@@ -168,7 +168,7 @@ canvas#game {
 #menu.hidden { display: none; }
 
 #menu-title {
-  font-size: 52px;
+  font-size: 46px;
   font-weight: 900;
   letter-spacing: 2px;
   background: linear-gradient(180deg, #ffe27a, #ff9d00);
@@ -176,16 +176,77 @@ canvas#game {
   background-clip: text;
   color: transparent;
   filter: drop-shadow(0 4px 14px rgba(255,196,0,0.35));
+  margin: -2px 0 2px;
+}
+
+/* Top status strip: rank + what you've collected, always visible */
+#menu-topbar {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+#menu-rank-chip {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: #0f0d16;
+  background: #ffc400;
+  padding: 3px 12px;
+  border-radius: 12px;
+}
+.menu-stat {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffe27a;
+}
+#menu-stat-stickers { color: #ffc2dd; }
+
+/* Player card: rank, progress bar, best run — the "you're getting somewhere" box */
+#menu-card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,196,0,0.28);
+  text-align: left;
+}
+#menu-card-body { flex: 1; min-width: 0; }
+#menu-card-rank {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+}
+#menu-card-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.14);
+  margin: 6px 0 5px;
+  overflow: hidden;
+}
+#menu-card-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #ffe27a, #ffc400);
+  transition: width 0.4s ease;
 }
 
 #menu-chars {
   display: flex;
-  gap: 20px;
+  gap: 4px;
   align-items: flex-end;
+  flex: 0 0 auto;
 }
 #menu-chars img {
-  width: 72px;
-  height: 72px;
+  width: 34px;
+  height: 34px;
   image-rendering: pixelated;
   animation: char-bounce 1.2s ease-in-out infinite;
 }
@@ -197,72 +258,170 @@ canvas#game {
 }
 
 #menu-start {
-  padding: 16px 48px;
-  font-size: 24px;
+  width: 100%;
+  max-width: 380px;
+  padding: 15px 24px;
+  font-size: 22px;
   font-weight: 800;
-  border-radius: 34px;
+  border-radius: 20px;
   border: none;
-  background: #ffc400;
+  background: #ffc400 url('assets/potty.png') no-repeat right 14px center / 42px 42px;
   color: #1a1a1a;
   box-shadow: 0 6px 20px rgba(255,196,0,0.4);
+  image-rendering: pixelated;
   -webkit-tap-highlight-color: transparent;
 }
 #menu-start:active { transform: scale(0.96); }
 
-/* Mode buttons: same hero treatment as Story, gold-outline variant */
-#menu-levels, #menu-dash, #menu-mayhem, #menu-daily, #menu-build, #menu-gift, #menu-cap, #menu-endless, #menu-stickers {
-  min-width: 320px;
-  padding: 14px 36px;
-  font-size: 18px;
-  font-weight: 800;
-  border-radius: 30px;
-  border: 2px solid #ffc400;
-  background: linear-gradient(180deg, rgba(255,196,0,0.16), rgba(255,140,0,0.10));
+/* ---- Mode tiles: two-up grid, each with its own art teaser ---- */
+#menu-grid {
+  width: 100%;
+  max-width: 380px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+.menu-tile {
+  position: relative;
+  min-height: 74px;
+  padding: 10px 11px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,196,0,0.38);
+  background-color: rgba(255,196,0,0.10);
+  background-repeat: no-repeat;
+  background-position: right -8px bottom -8px;
+  background-size: 54px 54px;
   color: #ffe27a;
-  box-shadow: 0 4px 16px rgba(255,196,0,0.22);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  image-rendering: pixelated;
   -webkit-tap-highlight-color: transparent;
 }
-#menu-levels:active, #menu-dash:active, #menu-mayhem:active, #menu-gift:active,
-#menu-build:active, #menu-cap:active, #menu-daily:active, #menu-endless:active,
-#menu-stickers:active {
-  transform: scale(0.96);
-  background: rgba(255,196,0,0.28);
+.menu-tile .tile-name {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #fff;
+  position: relative;
+  z-index: 1;
 }
+.menu-tile .tile-sub {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  opacity: 0.8;
+  position: relative;
+  z-index: 1;
+}
+.menu-tile:active { transform: scale(0.96); background-color: rgba(255,196,0,0.24); }
 
-/* Level Builder gets its own blue treatment — it's a headline feature */
-#menu-build {
-  border-color: #6fb3ff;
-  background: linear-gradient(180deg, rgba(111,179,255,0.22), rgba(60,120,220,0.12));
-  color: #cfe4ff;
-  box-shadow: 0 4px 16px rgba(111,179,255,0.25);
+/* Art teasers — a glance tells a pre-reader where the button goes */
+#menu-levels  { background-image: url('assets/door.png'); }
+#menu-dash    { background-image: url('assets/turbo_shoe.png'); }
+/* Mayhem: a whole crowd of Champs, not one icon — the tile should feel busy */
+#menu-mayhem { background-image: none; }
+#menu-mayhem::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  background-image:
+    url('assets/little_down_0.png'), url('assets/little_down_1.png'),
+    url('assets/little_down_0.png'), url('assets/little_down_1.png'),
+    url('assets/little_down_0.png'), url('assets/little_down_1.png'),
+    url('assets/little_down_0.png'), url('assets/little_down_1.png'),
+    url('assets/little_down_0.png'), url('assets/little_down_1.png');
+  background-size:
+    26px 26px, 20px 20px, 30px 30px, 22px 22px, 24px 24px,
+    28px 28px, 19px 19px, 26px 26px, 21px 21px, 24px 24px;
+  background-position:
+    97% 2px,  82% 40px, 88% 22px, 70% 8px,  63% 44px,
+    50% 30px, 38% 6px,  26% 46px, 12% 24px, 2%  52px;
 }
+#menu-mayhem .tile-name,
+#menu-mayhem .tile-sub { text-shadow: 0 1px 3px rgba(0,0,0,0.85); }
+#menu-daily   { background-image: url('assets/icon_trophy.png'); }
+#menu-build   { background-image: url('assets/prop_blocks.png'); }
+#menu-stickers{ background-image: url('assets/icon_star.png'); }
+
+/* Level Builder keeps its blue identity */
+#menu-build {
+  border-color: rgba(111,179,255,0.55);
+  background-color: rgba(111,179,255,0.14);
+  color: #cfe4ff;
+}
+#menu-build:active { background-color: rgba(111,179,255,0.28); }
+
+/* Sticker Book: pink, so it reads as the "collect" corner */
+#menu-stickers {
+  border-color: rgba(255,111,174,0.5);
+  background-color: rgba(255,111,174,0.13);
+  color: #ffc2dd;
+}
+#menu-stickers:active { background-color: rgba(255,111,174,0.26); }
+
+/* Daily Surprise: full-width present card under the grid */
+#menu-gift {
+  width: 100%;
+  max-width: 380px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 800;
+  border-radius: 16px;
+  border: 1px solid rgba(255,111,174,0.5);
+  background: rgba(255,111,174,0.14) url('assets/candy.png') no-repeat right 12px center / 34px 34px;
+  color: #ffc2dd;
+  text-align: left;
+  image-rendering: pixelated;
+  -webkit-tap-highlight-color: transparent;
+}
+#menu-gift:active { transform: scale(0.97); background-color: rgba(255,111,174,0.26); }
+#menu-gift.opened { opacity: 0.5; }
+
+/* Secondary unlockables keep the old wide-pill look */
+#menu-cap, #menu-endless, #menu-unlock {
+  width: 100%;
+  max-width: 380px;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 800;
+  border-radius: 16px;
+  border: 1px solid rgba(255,196,0,0.45);
+  background: rgba(255,196,0,0.12);
+  color: #ffe27a;
+  -webkit-tap-highlight-color: transparent;
+}
+#menu-cap:active, #menu-endless:active { transform: scale(0.97); }
 #menu-endless.hidden, #menu-dash.hidden, #menu-cap.hidden { display: none; }
 
-/* Daily Surprise: pink present treatment; dims once opened for the day */
-#menu-gift {
-  border-color: #ff6fae;
-  background: linear-gradient(180deg, rgba(255,111,174,0.20), rgba(255,60,130,0.12));
-  color: #ffc2dd;
-  box-shadow: 0 4px 16px rgba(255,111,174,0.25);
-}
-#menu-gift.opened {
-  opacity: 0.55;
-  box-shadow: none;
-}
-
 #menu-highscore {
-  font-size: 17px;
-  font-weight: 700;
-  color: #ffe27a;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.3;
 }
 
+/* Footer: quiet utility row */
+#menu-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 2px;
+}
 #menu-intro, #menu-howtoplay {
   background: none;
-  border: 1px solid rgba(255,255,255,0.3);
-  color: #fff;
+  border: 1px solid rgba(255,255,255,0.22);
+  color: rgba(255,255,255,0.8);
   border-radius: 20px;
-  padding: 8px 20px;
-  font-size: 14px;
+  padding: 7px 16px;
+  font-size: 12px;
   -webkit-tap-highlight-color: transparent;
 }
 #menu-intro:active, #menu-howtoplay:active { background: rgba(255,255,255,0.15); }

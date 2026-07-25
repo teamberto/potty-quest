@@ -20,6 +20,11 @@
   const menuIntroBtn = document.getElementById('menu-intro');
   const menuHowToPlayBtn = document.getElementById('menu-howtoplay');
   const menuHighscoreEl = document.getElementById('menu-highscore');
+  const menuRankChipEl = document.getElementById('menu-rank-chip');
+  const menuStatStarsEl = document.getElementById('menu-stat-stars');
+  const menuStatStickersEl = document.getElementById('menu-stat-stickers');
+  const menuCardRankEl = document.getElementById('menu-card-rank');
+  const menuCardFillEl = document.getElementById('menu-card-fill');
   const pauseBtn = document.getElementById('btn-pause');
   const howToPlayEl = document.getElementById('howtoplay');
   const htpStartBtn = document.getElementById('htp-start');
@@ -738,6 +743,18 @@
     const a = progress.stars[worldId] || [];
     return a[idx] || 0;
   }
+  // Every star ever earned, across every world — drives the menu rank badge.
+  function totalStars() {
+    let n = 0;
+    for (const k in progress.stars) {
+      const a = progress.stars[k] || [];
+      for (let i = 0; i < a.length; i++) n += a[i] || 0;
+    }
+    return n;
+  }
+  const STARS_PER_RANK = 6;
+  function champRank() { return Math.floor(totalStars() / STARS_PER_RANK) + 1; }
+  function rankProgress() { return totalStars() % STARS_PER_RANK; }
   function recordStars(worldId, idx, s) {
     const a = progress.stars[worldId] || (progress.stars[worldId] = []);
     if ((a[idx] || 0) < s) { a[idx] = s; saveProgress(); }
@@ -1647,8 +1664,25 @@
     hideOverlay();
     const b = loadBest();
     menuHighscoreEl.textContent = b.score > 0
-      ? `\u{1F3C6} Best run: ${b.score} pts (${b.total} saves — ${b.pee} pees, ${b.poop} poops)`
+      ? `\u{1F3C6} Best run: ${b.score} pts \u{00B7} ${b.total} saves`
       : 'No high score yet — be the first Potty Champ!';
+
+    // Top strip + player card
+    const stars = totalStars();
+    const rank = champRank();
+    const toNext = STARS_PER_RANK - rankProgress();
+    if (menuRankChipEl) menuRankChipEl.textContent = `RANK ${rank}`;
+    if (menuStatStarsEl) menuStatStarsEl.textContent = `\u{2605} ${stars}`;
+    if (menuStatStickersEl) menuStatStickersEl.textContent = `\u{1F4D6} ${stickerCount()}/${STICKERS.length}`;
+    if (menuCardRankEl) {
+      menuCardRankEl.textContent = `${KID_NAME} Rank ${rank} \u{00B7} ${toNext} \u{2605} to Rank ${rank + 1}`;
+    }
+    if (menuCardFillEl) {
+      menuCardFillEl.style.width = `${(rankProgress() / STARS_PER_RANK) * 100}%`;
+    }
+
+    // Tile label helper — art teaser lives in CSS, so only the text is rewritten.
+    const tile = (name, sub) => `<span class="tile-name">${name}</span><span class="tile-sub">${sub}</span>`;
     // Endless mode opens once School is fully cleared.
     if (menuEndlessBtn) {
       const schoolDone = isWorldComplete(WORLDS[WORLDS.length - 1]);
@@ -1660,20 +1694,20 @@
     // Potty Dash + Potty Mayhem: always playable from the menu.
     if (menuDashBtn) {
       if (!isPremium()) {
-        menuDashBtn.innerHTML = '\u{1F3C3} Potty Dash — Free Demo';
+        menuDashBtn.innerHTML = tile('Potty Dash', 'Free demo');
       } else {
         menuDashBtn.innerHTML = progress.dashBest > 0
-          ? `\u{1F3C3} Potty Dash — Best: ${progress.dashBest} m`
-          : '\u{1F3C3} Potty Dash';
+          ? tile('Potty Dash', `Best ${progress.dashBest} m`)
+          : tile('Potty Dash', 'Run and run');
       }
     }
     if (menuMayhemBtn) {
       if (!isPremium()) {
-        menuMayhemBtn.innerHTML = '\u{1F512} Potty Mayhem';
+        menuMayhemBtn.innerHTML = tile('Potty Mayhem', '\u{1F512} Locked');
       } else {
         menuMayhemBtn.innerHTML = progress.mayhemBest > 0
-          ? `\u{1F579} Potty Mayhem — Best: ${progress.mayhemBest} pts`
-          : '\u{1F579} Potty Mayhem';
+          ? tile('Potty Mayhem', `Best ${progress.mayhemBest} pts`)
+          : tile('Potty Mayhem', 'Total chaos');
       }
     }
     if (menuUnlockBtn) {
@@ -1682,16 +1716,16 @@
     }
     if (menuDailyBtn) {
       menuDailyBtn.innerHTML = isDailyDone()
-        ? `\u{2705} Daily done! ${progress.dailyTotal} \u{1F381} — back tomorrow!`
-        : `\u{1F3AF} Daily: ${dailyTypeToday().desc}`;
+        ? tile('Daily Challenge', `\u{2705} Done \u{00B7} ${progress.dailyTotal} won`)
+        : tile('Daily Challenge', dailyTypeToday().desc);
     }
     if (menuStickersBtn) {
-      menuStickersBtn.innerHTML = `\u{1F4D6} Sticker Book (${stickerCount()}/${STICKERS.length})`;
+      menuStickersBtn.innerHTML = tile('Sticker Book', `${stickerCount()} of ${STICKERS.length} found`);
     }
     if (menuGiftBtn) {
       menuGiftBtn.innerHTML = giftOpenedToday()
         ? '\u{1F381} Surprise opened — back tomorrow!'
-        : '\u{1F381} Daily Surprise!';
+        : '\u{1F381} Daily Surprise is ready!';
       menuGiftBtn.classList.toggle('opened', giftOpenedToday());
     }
     if (menuCapBtn) {
