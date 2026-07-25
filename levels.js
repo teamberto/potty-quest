@@ -6,14 +6,43 @@ const TILE = 24;
 const GRID_COLS = 22;
 const GRID_ROWS = 14;
 
+// Each room carries its own floor, so the house reads as a house instead of
+// one endless wood plane. `floor` falls back to the scene/default if omitted.
 const ROOMS = {
-  livingRoom: { x: 1, y: 1, w: 8, h: 6 },
-  kitchen: { x: 12, y: 1, w: 8, h: 6 },
-  hallway: { x: 1, y: 7, w: 19, h: 2 },
-  bathroom1: { x: 1, y: 9, w: 5, h: 4 },
-  bedroom: { x: 7, y: 9, w: 8, h: 4 },
-  mudroom: { x: 16, y: 9, w: 5, h: 4 },
+  livingRoom: { x: 1, y: 1, w: 8, h: 6, floor: 'floor_wood' },
+  kitchen: { x: 12, y: 1, w: 8, h: 6, floor: 'floor_lino' },
+  hallway: { x: 1, y: 7, w: 19, h: 2, floor: 'floor_wood' },
+  bathroom1: { x: 1, y: 9, w: 5, h: 4, floor: 'floor_tile' },
+  bedroom: { x: 7, y: 9, w: 8, h: 4, floor: 'floor_carpet' },
+  mudroom: { x: 16, y: 9, w: 5, h: 4, floor: 'floor_tile' },
 };
+
+// ---- Home character: wall art, windows, ceiling fan, warm light pools ----
+// Wall decor only renders on tiles that are actually drawn walls, so pieces
+// tied to rooms that haven't opened yet simply don't appear.
+const HOME_DECOR = [
+  { type: 'decor_photo', x: 3, y: 0 },
+  { type: 'decor_clock', x: 15, y: 0 },
+  { type: 'decor_scribble', x: 6, y: 10 },   // toddler art on the hall wall
+  { type: 'decor_chart', x: 15, y: 10 },     // growth chart by the bedroom
+];
+const HOME_WINDOWS = [
+  { x: 6, y: 0 },
+  { x: 18, y: 0 },
+];
+const HOME_FANS = [
+  { x: 4.5, y: 2.5 },
+];
+const HOME_LIGHTS = [
+  { x: 4.5, y: 3, r: 78, warm: true },
+  { x: 16, y: 3, r: 74, warm: true },
+  { x: 10, y: 8, r: 62, warm: true },
+  { x: 3, y: 11, r: 54, warm: true },
+  { x: 11, y: 11, r: 64, warm: true },
+  { x: 18, y: 11, r: 54, warm: true },
+];
+// The cat patrols the hallway — pure ambience, no collision.
+const HOME_CAT = { y: 7.6, xMin: 3, xMax: 17 };
 
 // Furniture: blocking = collidable obstacle. Position is top-left tile.
 const FURNITURE_BASE = [
@@ -23,15 +52,21 @@ const FURNITURE_BASE = [
   { type: "oven_cake", x: 13, y: 1, wTiles: 1, hTiles: 1, blocking: true },
   { type: "table", x: 17, y: 3, wTiles: 1, hTiles: 1, blocking: true },
   { type: "nail_table", x: 6, y: 4, wTiles: 1, hTiles: 1, blocking: true },
+  // lived-in clutter — never blocks, just makes the house feel real
+  { type: "prop_cup", x: 6, y: 2, wTiles: 1, hTiles: 1, blocking: false },
+  { type: "prop_bowl", x: 14, y: 4, wTiles: 1, hTiles: 1, blocking: false },
 ];
 
 const FURNITURE_L2 = [
   { type: "crib", x: 8, y: 9, wTiles: 1, hTiles: 1, blocking: true },
   { type: "toybox", x: 13, y: 11, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "prop_blocks", x: 12, y: 11, wTiles: 1, hTiles: 1, blocking: false },
 ];
 
 const FURNITURE_L3 = [
   { type: "laundry", x: 17, y: 9, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "prop_socks", x: 18, y: 10, wTiles: 1, hTiles: 1, blocking: false },
+  { type: "prop_slippers", x: 17, y: 12, wTiles: 1, hTiles: 1, blocking: false },
 ];
 
 const FURNITURE_L4 = [
@@ -109,7 +144,7 @@ const LEVELS = Array.from({ length: 15 }, (_, i) => homeLevel(i + 1));
 
 // ---------- World 2: The Park (open space — hard to corner him) ----------
 const PARK_FURNITURE = [
-  { type: "pool", x: 2, y: 2, wTiles: 6, hTiles: 4, blocking: true },       // pond
+  { type: "slide", x: 2, y: 2, wTiles: 4, hTiles: 3, blocking: true },      // the big slide
   { type: "swingset", x: 10, y: 2, wTiles: 4, hTiles: 3, blocking: true },
   { type: "sandbox", x: 16, y: 3, wTiles: 3, hTiles: 2, blocking: true },
   { type: "tree", x: 3, y: 8, wTiles: 1, hTiles: 2, blocking: true },
@@ -195,22 +230,41 @@ const LEVELS_STORE = [
 
 // ---------- World 4: School (many rooms — the final exam) ----------
 const SCHOOL_ROOMS = {
-  classA: { x: 1, y: 1, w: 9, h: 5 },
-  classB: { x: 12, y: 1, w: 8, h: 5 },
-  hallway: { x: 1, y: 6, w: 19, h: 3 },
-  cafeteria: { x: 4, y: 9, w: 13, h: 4 },
+  classA: { x: 1, y: 1, w: 9, h: 5, floor: 'floor_wood' },
+  classB: { x: 12, y: 1, w: 8, h: 5, floor: 'floor_wood' },
+  hallway: { x: 1, y: 6, w: 19, h: 3, floor: 'floor_lino_school' },
+  cafeteria: { x: 4, y: 9, w: 13, h: 4, floor: 'floor_lino_school' },
 };
 
 const SCHOOL_FURNITURE = [
+  // Classroom A — three rows of desks (aisles stay open between them)
   { type: "chalkboard", x: 2, y: 1, wTiles: 2, hTiles: 1, blocking: true },
   { type: "desk", x: 2, y: 3, wTiles: 1, hTiles: 1, blocking: true },
   { type: "desk", x: 4, y: 3, wTiles: 1, hTiles: 1, blocking: true },
   { type: "desk", x: 6, y: 3, wTiles: 1, hTiles: 1, blocking: true },
   { type: "desk", x: 8, y: 3, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 2, y: 4, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 4, y: 4, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 6, y: 4, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 8, y: 4, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 2, y: 5, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 4, y: 5, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 6, y: 5, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 8, y: 5, wTiles: 1, hTiles: 1, blocking: true },
+  // Classroom B — three rows as well
   { type: "chalkboard", x: 14, y: 1, wTiles: 2, hTiles: 1, blocking: true },
   { type: "desk", x: 13, y: 3, wTiles: 1, hTiles: 1, blocking: true },
   { type: "desk", x: 15, y: 3, wTiles: 1, hTiles: 1, blocking: true },
   { type: "desk", x: 17, y: 3, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 19, y: 3, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 13, y: 4, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 15, y: 4, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 17, y: 4, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 19, y: 4, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 13, y: 5, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 15, y: 5, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 17, y: 5, wTiles: 1, hTiles: 1, blocking: true },
+  { type: "desk", x: 19, y: 5, wTiles: 1, hTiles: 1, blocking: true },
   { type: "bookshelf", x: 10, y: 7, wTiles: 1, hTiles: 1, blocking: true },
   { type: "table", x: 6, y: 10, wTiles: 1, hTiles: 1, blocking: true },
   { type: "table", x: 10, y: 10, wTiles: 1, hTiles: 1, blocking: true },

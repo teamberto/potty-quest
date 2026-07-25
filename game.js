@@ -68,7 +68,11 @@
     'client', 'nail_table', 'mop',
     'icon_trophy',
     'toy_baseball', 'toy_football', 'toy_soccerball', 'toy_poolring',
-    'grass', 'fence', 'pool', 'hot_tub', 'sandbox', 'swingset',
+    'grass', 'fence', 'pool', 'hot_tub', 'sandbox', 'swingset', 'slide',
+    'floor_tile', 'floor_lino', 'floor_carpet', 'floor_lino_school',
+    'decor_photo', 'decor_clock', 'decor_scribble', 'decor_chart', 'decor_window',
+    'prop_bowl', 'prop_blocks', 'prop_cup', 'prop_socks', 'prop_slippers',
+    'fan', 'curtain', 'cat_0', 'cat_1',
     'candy', 'tree', 'bench', 'porta_potty', 'shelf', 'cart', 'floor_store', 'desk', 'chalkboard',
   ];
   const images = {};
@@ -542,6 +546,10 @@
   let stains = [];
   let celebrateTimer = 0;   // level-complete confetti shower
   let celebrateTick = 0;
+  const POTTY_GLOW_TIME = 1.4;
+  let pottyGlowTimer = 0;   // potty sparkles right after a rescue
+  const MOM_LOOKUP_TIME = 2.2;
+  let momLookupTimer = 0;   // mom glances up when there's an accident
   let gameState = 'splash'; // splash | intro | menu | playing | paused | levelComplete | bonusRound | bonusComplete | gift | giftOpen | ending
   let animClock = 0;
   let introTime = 0;
@@ -2624,6 +2632,7 @@
         stains.push({ type: t.alertType, x: t.x, y: t.y });
         accidentsThisLevel++;
         savesStreakThisLevel = 0;
+        momLookupTimer = MOM_LOOKUP_TIME; // mom hears it and looks up
         AudioFX.accident();
         shake(3, 0.35);
         spawnBurst(t.x + t.w / 2, t.y + t.h / 2, SAD_BLUE, 10, 50);
@@ -2741,6 +2750,7 @@
           t.state = 'relieved';
           t.relieveTimer = 1.0;
           AudioFX.success();
+          pottyGlowTimer = POTTY_GLOW_TIME;
           spawnBurst(sx, sy, GOLD_SPARK, 14, 70);
           spawnFloatText(sx, sy - 18, `+${earned}`, isPoop ? '#ffb37a' : '#ffe27a');
           t.nextAlertIn = mayhemMode ? Infinity
@@ -3051,6 +3061,9 @@
     updateMop(dt);
     updateCleanup(dt);
     updateDuck(dt);
+    updateCat(dt);
+    if (pottyGlowTimer > 0) pottyGlowTimer -= dt;
+    if (momLookupTimer > 0) momLookupTimer -= dt;
     updateParticles(dt);
     updateFloatingTexts(dt);
 
@@ -3066,21 +3079,130 @@
     return false;
   }
 
+  // Which floor does this tile use? Per-room floor wins, then the scene's,
+  // then plain wood. Gives every room its own identity.
+  function floorImgFor(tx, ty, scene) {
+    const cx = tx + 0.5, cy = ty + 0.5;
+    for (const r of scene.rooms) {
+      if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
+        return images[r.floor || scene.floorTile || 'floor_wood'];
+      }
+    }
+    return images[scene.floorTile || 'floor_wood'];
+  }
+
   function drawTilemap(scene = level) {
-    const floorImg = images[scene.floorTile || 'floor_wood'];
     const wallImg = images[scene.wallTile || 'wall'];
     ctx.fillStyle = '#12141c';
     ctx.fillRect(0, 0, WORLD_W, WORLD_H);
     for (let ty = 0; ty < GRID_ROWS; ty++) {
       for (let tx = 0; tx < GRID_COLS; tx++) {
+        const px = tx * TILE, py = ty * TILE;
         if (isWalkableTile(tx, ty, scene)) {
-          ctx.drawImage(floorImg, tx * TILE, ty * TILE);
+          const f = floorImgFor(tx, ty, scene);
+          if (f) ctx.drawImage(f, px, py);
+          // Baseboard: a shadowed strip where the floor meets a wall above.
+          // Cheap trick, huge depth payoff — no perspective needed.
+          if (!isWalkableTile(tx, ty - 1, scene)) {
+            ctx.fillStyle = 'rgba(0,0,0,0.30)';
+            ctx.fillRect(px, py, TILE, 3);
+            ctx.fillStyle = 'rgba(0,0,0,0.14)';
+            ctx.fillRect(px, py + 3, TILE, 2);
+          }
+          // soft shadow along side walls too
+          if (!isWalkableTile(tx - 1, ty, scene)) {
+            ctx.fillStyle = 'rgba(0,0,0,0.16)';
+            ctx.fillRect(px, py, 2, TILE);
+          }
+          if (!isWalkableTile(tx + 1, ty, scene)) {
+            ctx.fillStyle = 'rgba(0,0,0,0.16)';
+            ctx.fillRect(px + TILE - 2, py, 2, TILE);
+          }
         } else {
           const n = isWalkableTile(tx - 1, ty, scene) || isWalkableTile(tx + 1, ty, scene) ||
                     isWalkableTile(tx, ty - 1, scene) || isWalkableTile(tx, ty + 1, scene);
-          if (n) ctx.drawImage(wallImg, tx * TILE, ty * TILE);
+          if (n) {
+            ctx.drawImage(wallImg, px, py);
+            // lit top edge + shaded bottom = walls read as solid, not flat
+            ctx.fillStyle = 'rgba(255,255,255,0.13)';
+            ctx.fillRect(px, py, TILE, 2);
+            ctx.fillStyle = 'rgba(0,0,0,0.13)';
+            ctx.fillRect(px, py + TILE - 2, TILE, 2);
+          }
         }
       }
+    }
+  }
+
+  // ---------- Warm light pools on the floor (dimension without 3-D) ----------
+  function drawLights(scene = level) {
+    const lights = scene.lights || (worldNow().id === 'home' && !mayhemMode ? HOME_LIGHTS : null);
+    if (!lights) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const L of lights) {
+      // Rooms open up as levels progress — don't light a room that isn't there.
+      if (!isWalkableTile(Math.floor(L.x), Math.floor(L.y), scene)) continue;
+      const x = L.x * TILE, y = L.y * TILE, r = L.r || 64;
+      const g = ctx.createRadialGradient(x, y, 2, x, y, r);
+      g.addColorStop(0, L.warm ? 'rgba(255,206,130,0.20)' : 'rgba(150,200,255,0.18)');
+      g.addColorStop(0.55, L.warm ? 'rgba(255,190,110,0.07)' : 'rgba(140,190,255,0.06)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ---------- Wall decor: photos, clock, crayon scribbles, growth chart ----------
+  // Only paints on tiles that are actually rendered walls, so décor attached to
+  // rooms that haven't unlocked yet stays hidden automatically.
+  function isDrawnWall(tx, ty, scene) {
+    if (isWalkableTile(tx, ty, scene)) return false;
+    return isWalkableTile(tx - 1, ty, scene) || isWalkableTile(tx + 1, ty, scene) ||
+           isWalkableTile(tx, ty - 1, scene) || isWalkableTile(tx, ty + 1, scene);
+  }
+
+  function drawDecor(scene = level) {
+    if (worldNow().id !== 'home') return;
+    for (const it of HOME_DECOR) {
+      if (!isDrawnWall(it.x, it.y, scene)) continue;
+      const img = images[it.type];
+      if (img) ctx.drawImage(img, it.x * TILE, it.y * TILE);
+    }
+    // windows with curtains that breathe
+    for (const w of HOME_WINDOWS) {
+      if (!isDrawnWall(w.x, w.y, scene)) continue;
+      const wx = w.x * TILE, wy = w.y * TILE;
+      if (images.decor_window) ctx.drawImage(images.decor_window, wx, wy);
+      // cool daylight spilling in
+      const g = ctx.createRadialGradient(wx + 12, wy + 14, 2, wx + 12, wy + 14, 58);
+      g.addColorStop(0, 'rgba(180,220,255,0.16)');
+      g.addColorStop(1, 'rgba(180,220,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(wx - 46, wy, 104, 70);
+      // curtain sways gently
+      if (images.curtain) {
+        const sway = Math.sin(performance.now() / 900 + w.x) * 1.6;
+        ctx.drawImage(images.curtain, wx + sway, wy);
+      }
+    }
+  }
+
+  // ---------- Ceiling fan: spins above everything ----------
+  function drawFans(scene = level) {
+    if (worldNow().id !== 'home' || !images.fan) return;
+    for (const f of HOME_FANS) {
+      const cx = f.x * TILE + 12, cy = f.y * TILE + 12;
+      if (!isWalkableTile(Math.floor(f.x), Math.floor(f.y), scene)) continue;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(performance.now() / 260);
+      ctx.globalAlpha = 0.5; // it's on the ceiling, above the action
+      ctx.drawImage(images.fan, -24, -24);
+      ctx.restore();
     }
   }
 
@@ -3093,7 +3215,28 @@
 
   function drawPottySpots() {
     for (const spot of level.pottySpots) {
-      ctx.drawImage(images[level.pottyImg || 'potty'], spot.x * TILE - SPRITE_SIZE / 2, spot.y * TILE - SPRITE_SIZE / 2);
+      const px = spot.x * TILE - SPRITE_SIZE / 2, py = spot.y * TILE - SPRITE_SIZE / 2;
+      // after a successful rescue the potty glows and throws off sparkles —
+      // the room notices what you did
+      if (pottyGlowTimer > 0) {
+        const t = pottyGlowTimer / POTTY_GLOW_TIME;
+        const g = ctx.createRadialGradient(spot.x * TILE, spot.y * TILE, 2, spot.x * TILE, spot.y * TILE, 34);
+        g.addColorStop(0, `rgba(255,226,140,${(0.42 * t).toFixed(3)})`);
+        g.addColorStop(1, 'rgba(255,226,140,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(spot.x * TILE, spot.y * TILE, 34, 0, Math.PI * 2);
+        ctx.fill();
+        const n = performance.now();
+        ctx.font = '11px -apple-system';
+        ctx.textAlign = 'center';
+        for (let s = 0; s < 3; s++) {
+          const a = n / 380 + s * 2.1;
+          ctx.fillText('\u{2728}', spot.x * TILE + Math.cos(a) * 18, spot.y * TILE + Math.sin(a) * 12 - 4);
+        }
+        ctx.textAlign = 'left';
+      }
+      ctx.drawImage(images[level.pottyImg || 'potty'], px, py);
     }
   }
 
@@ -3141,6 +3284,41 @@
     if (blink) return;
     const bob = Math.sin(performance.now() / 220) * 2;
     ctx.drawImage(images.icon_trophy, trophy.x - 8, trophy.y - 8 + bob, 16, 16);
+  }
+
+  // ---------- The house cat: pads up and down the hallway ----------
+  const cat = { x: 6 * TILE, dir: 1, pauseT: 0, meowCool: 0 };
+  function updateCat(dt) {
+    if (worldNow().id !== 'home' || mayhemMode) return;
+    if (cat.meowCool > 0) cat.meowCool -= dt;
+    if (cat.pauseT > 0) { cat.pauseT -= dt; return; }
+    cat.x += cat.dir * 15 * dt;
+    if (cat.x > HOME_CAT.xMax * TILE) { cat.dir = -1; cat.pauseT = randRange(0.8, 2.2); }
+    if (cat.x < HOME_CAT.xMin * TILE) { cat.dir = 1; cat.pauseT = randRange(0.8, 2.2); }
+    // walk into the cat and it meows at you
+    const pc = centerOf(player);
+    if (cat.meowCool <= 0 && Math.hypot(pc.x - (cat.x + 12), pc.y - (HOME_CAT.y * TILE + 12)) < 22) {
+      cat.meowCool = 3;
+      AudioFX.catch();
+      spawnFloatText(cat.x + 12, HOME_CAT.y * TILE - 6, 'MEOW!', '#d8d0e0');
+    }
+  }
+  function drawCat() {
+    if (worldNow().id !== 'home' || mayhemMode) return;
+    const moving = cat.pauseT <= 0;
+    const frame = moving ? Math.floor(performance.now() / 240) % 2 : 0;
+    const img = images[`cat_${frame}`];
+    if (!img) return;
+    const y = HOME_CAT.y * TILE;
+    ctx.save();
+    if (cat.dir < 0) { // flip so he faces the way he's walking
+      ctx.translate(cat.x + TILE, y);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0);
+    } else {
+      ctx.drawImage(img, cat.x, y);
+    }
+    ctx.restore();
   }
 
   // ---------- Rubber duck easter egg (Home bathroom — walk into it!) ----------
@@ -3200,6 +3378,8 @@
 
   function draw() {
     drawTilemap();
+    drawLights();     // warm pools on the floor
+    drawDecor();      // wall art, windows, swaying curtains
     drawStains();
     drawScrubBars();
     drawPottySpots();
@@ -3208,6 +3388,7 @@
     drawTrophy();
     drawMopSpot();
     drawDuck();
+    drawCat();
 
     // depth-sorted furniture + characters
     const drawables = [];
@@ -3215,13 +3396,16 @@
       const img = images[f.type];
       if (!img) continue;
       const px = f.x * TILE, py = f.y * TILE;
-      drawables.push({ img, x: px, y: py, sortY: py + f.hTiles * TILE });
+      drawables.push({ img, x: px, y: py, sortY: py + f.hTiles * TILE, tvFlicker: f.type === 'tv' });
     }
-    // nail salon: mom files away at the client's nails (Home world only)
+    // nail salon: mom files away at the client's nails (Home world only).
+    // On an accident she stops and looks up — the world reacts to you.
     if (worldNow().momSalon) {
+      const momLooking = momLookupTimer > 0;
       drawables.push({
-        img: images[Math.floor(performance.now() / 500) % 2 === 0 ? 'mom' : 'mom_alt'],
+        img: images[momLooking ? 'mom_alt' : (Math.floor(performance.now() / 500) % 2 === 0 ? 'mom' : 'mom_alt')],
         x: MOM_POS.x * TILE, y: MOM_POS.y * TILE, sortY: MOM_POS.y * TILE + TILE,
+        exclaim: momLooking,
       });
       drawables.push({
         img: images.client,
@@ -3240,12 +3424,27 @@
         // The friend's teal cap (via capSprite) is how you tell the kids apart.
         drawCharacter(d.toddlerRef, 'little');
       }
-      else ctx.drawImage(d.img, d.x, d.y);
+      else {
+        ctx.drawImage(d.img, d.x, d.y);
+        // the TV actually flickers between channels
+        if (d.tvFlicker) {
+          ctx.fillStyle = `rgba(200,240,255,${(0.10 + Math.random() * 0.16).toFixed(3)})`;
+          ctx.fillRect(d.x + 3, d.y + 4, 18, 12);
+        }
+        if (d.exclaim) {
+          const bob = Math.sin(performance.now() / 150) * 2;
+          ctx.font = '13px -apple-system';
+          ctx.textAlign = 'center';
+          ctx.fillText('\u{2757}', d.x + 12, d.y - 4 + bob);
+          ctx.textAlign = 'left';
+        }
+      }
     }
 
     drawCarriedMop();
     drawParticles();
     drawFloatingTexts();
+    drawFans();       // ceiling fan spins above the whole room
     drawAlertIcon();
     drawBanner();
     // white flash during clutch slow-mo
