@@ -348,15 +348,20 @@ canvas#game {
 #menu-mayhem .tile-name,
 #menu-mayhem .tile-sub { text-shadow: 0 1px 3px rgba(0,0,0,0.85); }
 #menu-daily   { background-image: url('assets/icon_trophy.png'); }
-#menu-build   { background-image: url('assets/prop_blocks.png'); }
+#menu-build   { background-image: url('assets/toolbox.png'); }
 #menu-stickers{ background-image: url('assets/icon_star.png'); }
 
-/* Level Builder keeps its blue identity */
+/* Level Builder keeps its blue identity. Its art is a taller 32x32 sprite
+   (toolbox + spilled hardware), so it sits fully inside the tile, uncropped. */
 #menu-build {
   border-color: rgba(111,179,255,0.55);
   background-color: rgba(111,179,255,0.14);
+  background-size: 52px 52px;
+  background-position: right 1px bottom 1px;
   color: #cfe4ff;
 }
+#menu-build .tile-name,
+#menu-build .tile-sub { text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
 #menu-build:active { background-color: rgba(111,179,255,0.28); }
 
 /* Sticker Book: pink, so it reads as the "collect" corner */
