@@ -65,7 +65,6 @@
   const edGoalEl = document.getElementById('ed-goal');
   const edPlanEl = document.getElementById('ed-plan');
   const edToolsEl = document.getElementById('ed-tools');
-  const edTabsEl = document.getElementById('ed-tabs');
   const edPaletteEl = document.getElementById('ed-palette');
   const edHintEl = document.getElementById('ed-hint');
   const paywallEl = document.getElementById('paywall');
@@ -773,8 +772,9 @@
   // Building is free (first FREE_STAGES stages). Playing a custom stage needs
   // the Unlock Everything purchase — you design for free, you pay to press ▶.
   const CUSTOM_KEY = 'pottychamp_custom_v1';
-  const FREE_STAGES = 2;
-  const MAX_STAGES = 12;
+  const FREE_STAGES = 1;    // one slot to build in for free — the rest are a purchase
+  const SLOT_BATCH = 6;     // how many slots we show at a time
+  const MAX_STAGES = 24;
 
   function loadCustom() {
     try {
@@ -788,11 +788,20 @@
   }
   function stageCap() { return isPremium() ? MAX_STAGES : FREE_STAGES; }
 
+  // Slots are revealed a batch at a time: show 6, and once all 6 are built,
+  // the next 6 appear. Keeps the screen from looking like homework on day one.
+  function visibleSlots() {
+    const filled = customLevels.length;
+    const batches = Math.floor(filled / SLOT_BATCH) + 1;
+    return Math.min(MAX_STAGES, batches * SLOT_BATCH);
+  }
+
   function blankStage(n) {
     return {
       name: `Stage ${n}`,
       plan: 0,
       floors: {},          // room index -> floor id
+      rooms: [],           // player-drawn rooms, appended after the plan's rooms
       items: [],           // { type, x, y }
       potty: { x: 10.5, y: 6 },
       bigStart: { x: 4, y: 8 },
@@ -804,9 +813,18 @@
   }
 
   // Turn a saved stage into a level object the existing engine understands.
-  function stageToLevel(st) {
+  // How many rooms come from the chosen starter plan — anything past this index
+  // was drawn by the player and can be deleted again.
+  function planRoomCount(st) {
+    return (BUILD_PLANS[st.plan] || BUILD_PLANS[0]).rooms.length;
+  }
+  function allStageRooms(st) {
     const plan = BUILD_PLANS[st.plan] || BUILD_PLANS[0];
-    const rooms = plan.rooms.map((r, i) => Object.assign({}, r, { floor: st.floors[i] || 'floor_wood' }));
+    return plan.rooms.concat(st.rooms || []);
+  }
+
+  function stageToLevel(st) {
+    const rooms = allStageRooms(st).map((r, i) => Object.assign({}, r, { floor: st.floors[i] || 'floor_wood' }));
     const furniture = st.items.map((it) => {
       const sz = BUILD_SIZES[it.type] || [1, 1];
       return {
@@ -919,8 +937,8 @@
   function renderMyLevels() {
     mlGridEl.innerHTML = '';
     const cap = stageCap();
-    for (let i = 0; i < Math.max(customLevels.length + 1, FREE_STAGES + 1); i++) {
-      if (i >= MAX_STAGES) break;
+    const slots = visibleSlots();
+    for (let i = 0; i < slots; i++) {
       const st = customLevels[i];
       const card = document.createElement('div');
       card.className = 'ml-card';
@@ -975,20 +993,112 @@
   }
 
   // ---------- The editor ----------
-  const ed = { idx: 0, st: null, tool: 'place', tab: 0, sel: null };
+  const ed = { idx: 0, st: null, tool: 'place', tab: 0, sel: null, drag: null };
+
+  // ---- drawing rooms ----
+  const MIN_ROOM = 3;       // no rooms too small to walk through
+  const MAX_ROOMS = 10;     // player-drawn rooms on top of the starter plan
+
+  // A room {x,y,w,h} covers tiles x..x+w-1 and y..y+h-1.
+  // Two rooms only count as joined if they share an EDGE — corner-to-corner
+  // looks connected but Captain can't walk through a diagonal.
+  function roomsJoined(a, b) {
+    const ax1 = a.x + a.w - 1, ay1 = a.y + a.h - 1;
+    const bx1 = b.x + b.w - 1, by1 = b.y + b.h - 1;
+    const xOverlap = a.x <= bx1 && b.x <= ax1;
+    const yOverlap = a.y <= by1 && b.y <= ay1;
+    if (xOverlap && yOverlap) return true;                              // overlapping
+    if (xOverlap && (ay1 + 1 === b.y || by1 + 1 === a.y)) return true;  // stacked
+    if (yOverlap && (ax1 + 1 === b.x || bx1 + 1 === a.x)) return true;  // side by side
+    return false;
+  }
+
+  // A new room that floats off on its own gets a corridor back to the nearest
+  // existing room, so a kid can never strand a piece of their own level.
+  function connectRoom(st, r) {
+    const others = allStageRooms(st).filter((o) => o !== r);
+    if (!others.length) return;
+    if (others.some((o) => roomsJoined(r, o))) return;
+
+    const cx = Math.floor(r.x + r.w / 2), cy = Math.floor(r.y + r.h / 2);
+    let best = others[0], bestD = Infinity;
+    for (const o of others) {
+      const d = Math.abs(o.x + o.w / 2 - cx) + Math.abs(o.y + o.h / 2 - cy);
+      if (d < bestD) { bestD = d; best = o; }
+    }
+    const tx = Math.floor(best.x + best.w / 2), ty = Math.floor(best.y + best.h / 2);
+    const clampR = (x, y, w, h) => {
+      const cxp = Math.max(0, Math.min(GRID_COLS - 1, x));
+      const cyp = Math.max(0, Math.min(GRID_ROWS - 1, y));
+      return { x: cxp, y: cyp, w: Math.min(w, GRID_COLS - cxp), h: Math.min(h, GRID_ROWS - cyp) };
+    };
+    // L-shaped hall, 2 tiles wide so Captain and Champ can pass each other.
+    // Runs the full span in each direction plus one tile of overlap at each
+    // end, so the corridor genuinely bites into both rooms.
+    const hx = Math.min(cx, tx), hw = Math.abs(tx - cx) + 2;
+    st.rooms.push(clampR(hx, cy, hw, 2));
+    const vy = Math.min(cy, ty), vh = Math.abs(ty - cy) + 2;
+    st.rooms.push(clampR(tx, vy, 2, vh));
+  }
+
+  function addDrawnRoom(st, x0, y0, x1, y1) {
+    const x = Math.max(0, Math.min(x0, x1));
+    const y = Math.max(0, Math.min(y0, y1));
+    const w = Math.min(GRID_COLS - 1, Math.max(x0, x1)) - x + 1;   // tile count
+    const h = Math.min(GRID_ROWS - 1, Math.max(y0, y1)) - y + 1;
+    if (w < MIN_ROOM || h < MIN_ROOM) {
+      showBanner('Drag a bigger room!', '#ff9d3f');
+      return false;
+    }
+    if ((st.rooms || []).length >= MAX_ROOMS) {
+      showBanner("That's plenty of rooms!", '#ff9d3f');
+      return false;
+    }
+    const r = { x, y, w, h };
+    st.rooms.push(r);
+    connectRoom(st, r);
+    AudioFX.powerup();
+    return true;
+  }
+
+  // Tapping (not dragging) inside a room you drew removes it again.
+  function deleteDrawnRoomAt(st, tx, ty) {
+    for (let i = st.rooms.length - 1; i >= 0; i--) {
+      const r = st.rooms[i];
+      const cx = tx + 0.5, cy = ty + 0.5;
+      if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
+        st.rooms.splice(i, 1);
+        reseatStage(st);
+        AudioFX.catch();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // After the walkable space changes, sweep anything now floating in the void
+  // back onto solid ground.
+  function reseatStage(st) {
+    const lv = stageToLevel(st);
+    st.items = st.items.filter((it) => isWalkableTile(it.x, it.y, lv));
+    if (!isWalkableTile(Math.floor(st.potty.x), Math.floor(st.potty.y), lv)) st.potty = firstFreeTile(lv, 0.5);
+    if (!isWalkableTile(Math.floor(st.bigStart.x), Math.floor(st.bigStart.y), lv)) st.bigStart = firstFreeTile(lv);
+    if (!isWalkableTile(Math.floor(st.littleStart.x), Math.floor(st.littleStart.y), lv)) st.littleStart = firstFreeTile(lv, 0, true);
+  }
 
   function openEditor(idx) {
     ed.idx = idx;
     ed.st = customLevels[idx] ? JSON.parse(JSON.stringify(customLevels[idx])) : blankStage(idx + 1);
+    if (!Array.isArray(ed.st.rooms)) ed.st.rooms = [];   // stages saved before rooms existed
     ed.tool = 'place';
     ed.tab = 0;
+    ed.drag = null;
     ed.sel = BUILD_PALETTE[0].items[0];
     myLevelsEl.classList.add('hidden');
     hideOverlay();
     gameState = 'editor';
     edNameEl.value = ed.st.name;
     buildPlanSeg();
-    buildTabs();
     buildPalette();
     syncSegs();
     setTool('place');
@@ -1005,12 +1115,7 @@
       if (i === ed.st.plan) b.className = 'on';
       b.addEventListener('click', () => {
         ed.st.plan = i;
-        // nudge anything now stranded outside the new plan back into bounds
-        const lv = stageToLevel(ed.st);
-        ed.st.items = ed.st.items.filter((it) => isWalkableTile(it.x, it.y, lv));
-        if (!isWalkableTile(Math.floor(ed.st.potty.x), Math.floor(ed.st.potty.y), lv)) ed.st.potty = firstFreeTile(lv, 0.5);
-        if (!isWalkableTile(Math.floor(ed.st.bigStart.x), Math.floor(ed.st.bigStart.y), lv)) ed.st.bigStart = firstFreeTile(lv);
-        if (!isWalkableTile(Math.floor(ed.st.littleStart.x), Math.floor(ed.st.littleStart.y), lv)) ed.st.littleStart = firstFreeTile(lv, 0, true);
+        reseatStage(ed.st);   // nudge anything now stranded in the void back inside
         buildPlanSeg();
       });
       edPlanEl.appendChild(b);
@@ -1023,30 +1128,38 @@
     return { x: t.x + (off || 0), y: t.y };
   }
 
-  function buildTabs() {
-    edTabsEl.innerHTML = '';
-    BUILD_PALETTE.forEach((g, i) => {
-      const b = document.createElement('button');
-      b.textContent = g.tab;
-      if (i === ed.tab) b.className = 'on';
-      b.addEventListener('click', () => { ed.tab = i; buildTabs(); buildPalette(); });
-      edTabsEl.appendChild(b);
+  // The picker is a stack of sideways-scrolling shelves — one per category —
+  // so nothing is hidden behind a tab a kid has to find first.
+  function buildPalette() {
+    edPaletteEl.innerHTML = '';
+    BUILD_PALETTE.forEach((g) => {
+      const row = document.createElement('div');
+      row.className = 'ed-row';
+
+      const title = document.createElement('div');
+      title.className = 'ed-row-title';
+      title.innerHTML = `<span>${g.icon || ''} ${g.tab}</span><span class="ed-row-swipe">swipe &#8250;</span>`;
+      row.appendChild(title);
+
+      const strip = document.createElement('div');
+      strip.className = 'ed-row-strip';
+      for (const type of g.items) {
+        const b = document.createElement('button');
+        b.className = 'ed-item' + (ed.sel === type && ed.tool === 'place' ? ' on' : '');
+        b.innerHTML =
+          `<img src="assets/${type}.png" alt="">` +
+          `<span class="ed-item-name">${BUILD_NAMES[type] || type}</span>`;
+        b.addEventListener('click', () => { ed.sel = type; setTool('place'); buildPalette(); });
+        strip.appendChild(b);
+      }
+      row.appendChild(strip);
+      edPaletteEl.appendChild(row);
     });
   }
 
-  function buildPalette() {
-    edPaletteEl.innerHTML = '';
-    for (const type of BUILD_PALETTE[ed.tab].items) {
-      const b = document.createElement('button');
-      b.className = 'ed-item' + (ed.sel === type && ed.tool === 'place' ? ' on' : '');
-      b.innerHTML = `<img src="assets/${type}.png" alt="${type}">`;
-      b.addEventListener('click', () => { ed.sel = type; setTool('place'); buildPalette(); });
-      edPaletteEl.appendChild(b);
-    }
-  }
-
   const TOOL_HINTS = {
-    place: 'Pick an item below, then tap the map to place it.',
+    place: 'Pick something below, then tap the map to put it down.',
+    room: 'Drag on the map to draw a new room. Tap a room you drew to remove it.',
     erase: 'Tap any item on the map to remove it.',
     floor: 'Tap a room to change its floor.',
     potty: 'Tap where the potty should go.',
@@ -1091,6 +1204,35 @@
     const wx = (clientX - rect.left - offsetX) / scale;
     const wy = (clientY - rect.top - offsetY) / scale;
     return { x: Math.floor(wx / TILE), y: Math.floor(wy / TILE) };
+  }
+
+  // ---- room tool: press, drag, release ----
+  function editorDragStart(clientX, clientY) {
+    if (ed.tool !== 'room') return false;
+    const t = tapToTile(clientX, clientY);
+    if (t.x < 0 || t.y < 0 || t.x >= GRID_COLS || t.y >= GRID_ROWS) return false;
+    ed.drag = { x0: t.x, y0: t.y, x1: t.x, y1: t.y };
+    return true;
+  }
+  function editorDragMove(clientX, clientY) {
+    if (!ed.drag) return;
+    const t = tapToTile(clientX, clientY);
+    ed.drag.x1 = Math.max(0, Math.min(GRID_COLS - 1, t.x));
+    ed.drag.y1 = Math.max(0, Math.min(GRID_ROWS - 1, t.y));
+  }
+  function editorDragEnd() {
+    const d = ed.drag;
+    ed.drag = null;
+    if (!d) return;
+    const tiny = Math.abs(d.x1 - d.x0) < 1 && Math.abs(d.y1 - d.y0) < 1;
+    if (tiny) {
+      // treated as a tap: remove a room they drew, if that's what they hit
+      if (!deleteDrawnRoomAt(ed.st, d.x0, d.y0)) {
+        showBanner('Drag to draw a room!', '#ff9d3f');
+      }
+      return;
+    }
+    addDrawnRoom(ed.st, d.x0, d.y0, d.x1, d.y1);
   }
 
   function editorTap(clientX, clientY) {
@@ -1178,6 +1320,36 @@
     ctx.fillStyle = '#6fb3ff';
     ctx.fillText('POTTY', lv.pottySpots[0].x * TILE, lv.pottySpots[0].y * TILE - 15);
     ctx.textAlign = 'left';
+
+    // With the room tool up, outline the rooms the player drew so it's obvious
+    // which ones they're allowed to tap away.
+    if (ed.tool === 'room') {
+      const start = planRoomCount(ed.st);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(111,179,255,0.85)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      for (let i = start; i < lv.rooms.length; i++) {
+        const r = lv.rooms[i];
+        ctx.strokeRect(r.x * TILE, r.y * TILE, r.w * TILE, r.h * TILE);
+      }
+      ctx.restore();
+      if (ed.drag) {
+        const x = Math.min(ed.drag.x0, ed.drag.x1) * TILE;
+        const y = Math.min(ed.drag.y0, ed.drag.y1) * TILE;
+        const w = (Math.abs(ed.drag.x1 - ed.drag.x0) + 1) * TILE;
+        const h = (Math.abs(ed.drag.y1 - ed.drag.y0) + 1) * TILE;
+        const big = Math.abs(ed.drag.x1 - ed.drag.x0) >= MIN_ROOM - 1 &&
+                    Math.abs(ed.drag.y1 - ed.drag.y0) >= MIN_ROOM - 1;
+        ctx.save();
+        ctx.fillStyle = big ? 'rgba(111,179,255,0.28)' : 'rgba(255,157,63,0.25)';
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = big ? '#6fb3ff' : '#ff9d3f';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, w, h);
+        ctx.restore();
+      }
+    }
     drawBanner();
   }
 
@@ -1211,7 +1383,7 @@
     saveCustom();
     AudioFX.fanfare();
     editorEl.classList.add('hidden');
-    // Second stage finished and still free? That's the moment to pitch.
+    // Free slot used up? That's the moment to pitch.
     const justHitCap = !isPremium() && customLevels.filter(Boolean).length >= FREE_STAGES;
     openMyLevels();
     if (justHitCap) {
@@ -2518,9 +2690,21 @@
   // swipe to change lanes / swipe up to jump (pointer events cover touch + mouse)
   canvas.addEventListener('pointerdown', (e) => {
     if (gameState === 'dash') { dashSwipeX = e.clientX; dashSwipeY = e.clientY; }
-    else if (gameState === 'editor') { e.preventDefault(); editorTap(e.clientX, e.clientY); }
+    else if (gameState === 'editor') {
+      e.preventDefault();
+      if (editorDragStart(e.clientX, e.clientY)) {
+        if (canvas.setPointerCapture) { try { canvas.setPointerCapture(e.pointerId); } catch (err) {} }
+      } else {
+        editorTap(e.clientX, e.clientY);
+      }
+    }
   });
+  canvas.addEventListener('pointermove', (e) => {
+    if (gameState === 'editor' && ed.drag) { e.preventDefault(); editorDragMove(e.clientX, e.clientY); }
+  });
+  canvas.addEventListener('pointercancel', () => { ed.drag = null; });
   canvas.addEventListener('pointerup', (e) => {
+    if (gameState === 'editor' && ed.drag) { e.preventDefault(); editorDragEnd(); return; }
     if (gameState !== 'dash' || dashSwipeX === null) return;
     const dx = e.clientX - dashSwipeX;
     const dy = e.clientY - dashSwipeY;

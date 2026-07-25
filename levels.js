@@ -361,26 +361,45 @@ const BUILD_FLOORS = [
   { id: 'floor_store', name: 'Store' },
 ];
 
-// Everything placeable, grouped into palette tabs.
+// Everything placeable. Each group becomes one sideways-scrolling row in the
+// builder, so a kid swipes through a shelf of stuff instead of hunting tabs.
 const BUILD_PALETTE = [
-  { tab: 'Home', items: ['couch', 'tv', 'table', 'oven_cake', 'crib', 'toybox', 'laundry', 'bookshelf', 'plant', 'rug', 'nail_table'] },
-  { tab: 'Park', items: ['tree', 'bench', 'swingset', 'slide', 'sandbox', 'pool', 'hot_tub'] },
-  { tab: 'Store', items: ['shelf', 'cart'] },
-  { tab: 'School', items: ['desk', 'chalkboard'] },
-  { tab: 'Toys', items: ['toy_baseball', 'toy_football', 'toy_soccerball', 'toy_poolring', 'prop_blocks', 'prop_bowl', 'prop_cup', 'prop_socks', 'prop_slippers'] },
+  { tab: 'Furniture', icon: '\u{1F6CB}\u{FE0F}', items: ['couch', 'table', 'tv', 'bookshelf', 'crib', 'oven_cake', 'laundry', 'bench', 'desk', 'shelf', 'nail_table', 'cart'] },
+  { tab: 'Outside',   icon: '\u{1F333}',        items: ['tree', 'fence', 'bench', 'swingset', 'slide', 'sandbox', 'pool', 'hot_tub', 'porta_potty'] },
+  { tab: 'Toys',      icon: '\u{1F9F8}',        items: ['toybox', 'prop_blocks', 'toy_baseball', 'toy_football', 'toy_soccerball', 'toy_poolring'] },
+  { tab: 'Decor',     icon: '\u{1F5BC}\u{FE0F}', items: ['rug', 'plant', 'curtain', 'decor_photo', 'decor_clock', 'decor_window', 'decor_chart', 'decor_scribble', 'chalkboard'] },
+  { tab: 'Snacks',    icon: '\u{1F36A}',        items: ['cake_whole', 'cookie', 'candy', 'prop_bowl', 'prop_cup'] },
+  { tab: 'Messy',     icon: '\u{1F9E6}',        items: ['prop_socks', 'prop_slippers', 'mop'] },
 ];
+
+// Kid-readable names shown under each palette item.
+const BUILD_NAMES = {
+  couch: 'Couch', table: 'Table', tv: 'TV', bookshelf: 'Books', crib: 'Crib',
+  oven_cake: 'Oven', laundry: 'Laundry', bench: 'Bench', desk: 'Desk',
+  shelf: 'Shelf', nail_table: 'Salon', cart: 'Cart',
+  tree: 'Tree', fence: 'Fence', swingset: 'Swings', slide: 'Slide',
+  sandbox: 'Sandbox', pool: 'Pool', hot_tub: 'Hot Tub', porta_potty: 'Porta Potty',
+  toybox: 'Toy Box', prop_blocks: 'Blocks', toy_baseball: 'Baseball',
+  toy_football: 'Football', toy_soccerball: 'Soccer', toy_poolring: 'Floatie',
+  rug: 'Rug', plant: 'Plant', curtain: 'Curtain', decor_photo: 'Photo',
+  decor_clock: 'Clock', decor_window: 'Window', decor_chart: 'Chart',
+  decor_scribble: 'Art', chalkboard: 'Chalkboard',
+  cake_whole: 'Cake', cookie: 'Cookie', candy: 'Candy', prop_bowl: 'Bowl',
+  prop_cup: 'Cup', prop_socks: 'Socks', prop_slippers: 'Slippers', mop: 'Mop',
+};
 
 // Which placed items actually block movement (the rest are decoration).
 const BUILD_BLOCKING = [
   'couch', 'tv', 'table', 'oven_cake', 'crib', 'toybox', 'laundry', 'bookshelf',
   'plant', 'nail_table', 'tree', 'bench', 'swingset', 'slide', 'sandbox', 'pool',
-  'hot_tub', 'shelf', 'cart', 'desk', 'chalkboard',
+  'hot_tub', 'shelf', 'cart', 'desk', 'chalkboard', 'fence', 'porta_potty',
 ];
 
 // Multi-tile footprints, so big items reserve the right space.
 const BUILD_SIZES = {
   couch: [3, 1], swingset: [4, 3], slide: [4, 3], sandbox: [3, 2],
   pool: [6, 4], hot_tub: [2, 2], shelf: [2, 1], chalkboard: [2, 1],
+  bench: [2, 1], tree: [1, 2],
 };
 
 // The three difficulty tiers behind the 😊 / 😐 / 😤 picker.

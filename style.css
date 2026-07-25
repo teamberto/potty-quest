@@ -1123,49 +1123,75 @@ canvas#game {
   -webkit-tap-highlight-color: transparent;
 }
 .ed-tool.on { background: #6fb3ff; color: #08101c; border-color: #6fb3ff; }
-#ed-tabs {
-  display: flex;
-  gap: 5px;
-  padding: 4px 8px;
-  overflow-x: auto;
-  background: rgba(8,9,14,0.9);
-}
-#ed-tabs button {
-  flex: 0 0 auto;
-  padding: 5px 11px;
-  font-size: 11px;
-  font-weight: 800;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.05);
-  color: #b9bcc6;
-  -webkit-tap-highlight-color: transparent;
-}
-#ed-tabs button.on { background: #ffc400; color: #1a1a1a; border-color: #ffc400; }
+/* ---- Item picker: a stack of sideways-scrolling shelves ---- */
 #ed-palette {
+  background: rgba(8,9,14,0.95);
+  padding: 2px 0 calc(env(safe-area-inset-bottom, 0px) + 6px);
+  max-height: 38vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.ed-row { padding: 3px 0 5px; }
+.ed-row + .ed-row { border-top: 1px solid rgba(255,255,255,0.06); }
+.ed-row-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 3px 10px 2px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #ffe27a;
+}
+.ed-row-swipe {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: none;
+  color: rgba(255,255,255,0.32);
+}
+.ed-row-strip {
   display: flex;
   gap: 6px;
-  padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 8px);
+  padding: 0 10px 2px;
   overflow-x: auto;
-  background: rgba(8,9,14,0.95);
-  align-items: center;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
 }
+.ed-row-strip::-webkit-scrollbar { display: none; }
 .ed-item {
   flex: 0 0 auto;
-  width: 46px;
-  height: 46px;
+  width: 54px;
+  padding: 5px 2px 4px;
   border-radius: 10px;
   border: 2px solid rgba(255,255,255,0.16);
   background: rgba(255,255,255,0.06);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 2px;
+  scroll-snap-align: start;
   -webkit-tap-highlight-color: transparent;
 }
-.ed-item img { width: 32px; height: 32px; image-rendering: pixelated; }
+.ed-item img { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; }
+.ed-item-name {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #b9bcc6;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 .ed-item.on { border-color: #ffc400; background: rgba(255,196,0,0.22); }
-/* editor strips scroll horizontally without eating vertical flicks */
-#ed-tools, #ed-tabs, #ed-palette, #ed-opts { touch-action: pan-x; }
+.ed-item.on .ed-item-name { color: #ffe27a; }
+/* horizontal strips shouldn't eat the vertical flick that scrolls the picker */
+#ed-tools, #ed-opts, .ed-row-strip { touch-action: pan-x; }
+#ed-palette { touch-action: pan-y; }
 #my-levels, #my-levels * { touch-action: pan-y; }
 
 /* ---- World / level select ---- */
