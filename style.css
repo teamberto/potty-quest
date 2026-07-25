@@ -626,6 +626,121 @@ canvas#game {
 }
 #bonus-howto-start:active { transform: scale(0.96); }
 
+/* ---- Potty Dash: how to play (first run) ---- */
+#dash-howto {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: rgba(10,11,16,0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+#dash-howto.hidden { display: none; }
+#dash-howto .dh-box {
+  width: 100%;
+  max-width: 440px;
+  max-height: 92vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  color: #fff;
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 8px;
+}
+#dash-howto h1 {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: linear-gradient(180deg, #ffe27a, #ff9d00);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+#dash-howto .dh-intro {
+  font-size: 14px;
+  line-height: 1.4;
+  color: #d8dae2;
+  max-width: 360px;
+}
+#dash-howto .dh-intro strong { color: #ffb0a0; }
+/* the two big gesture cards up top */
+#dash-howto .dh-moves {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
+}
+#dash-howto .dh-move {
+  flex: 1;
+  max-width: 170px;
+  padding: 12px 8px;
+  border-radius: 16px;
+  border: 2px solid rgba(255,196,0,0.5);
+  background: rgba(255,196,0,0.10);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+#dash-howto .dh-gesture {
+  font-size: 26px;
+  line-height: 1;
+  animation: dhNudge 1.1s ease-in-out infinite;
+}
+@keyframes dhNudge {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+#dash-howto .dh-move-label {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: #ffe27a;
+}
+#dash-howto .dh-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  text-align: left;
+}
+/* the Turbo Focus card is the important one — give it the full width + a glow */
+#dash-howto .dh-grid .dh-focus {
+  grid-column: 1 / -1;
+  border-left-color: #6fb3ff;
+  background: rgba(80,150,255,0.12);
+}
+#dash-howto .dh-bolt {
+  font-size: 26px;
+  line-height: 1;
+  flex-shrink: 0;
+  animation: dhBolt 0.9s ease-in-out infinite;
+}
+@keyframes dhBolt {
+  0%, 100% { transform: scale(1); filter: none; }
+  50% { transform: scale(1.18); filter: drop-shadow(0 0 6px rgba(140,200,255,0.9)); }
+}
+#dash-howto-start {
+  margin-top: 4px;
+  padding: 14px 40px;
+  font-size: 19px;
+  font-weight: 800;
+  border-radius: 30px;
+  border: none;
+  background: #ffc400;
+  color: #1a1a1a;
+  box-shadow: 0 6px 20px rgba(255,196,0,0.35);
+  -webkit-tap-highlight-color: transparent;
+}
+#dash-howto-start:active { transform: scale(0.96); }
+
 /* ---- World / level select ---- */
 #level-select {
   position: absolute;
@@ -762,13 +877,14 @@ canvas#game {
 #sticker-book, #sticker-book *,
 #howtoplay, #howtoplay *,
 #bonus-howto, #bonus-howto *,
+#dash-howto, #dash-howto *,
 #level-select, #level-select * {
   touch-action: pan-y;
 }
 
 /* Exit buttons stay pinned to the bottom of the screen while you scroll —
    you can always get out, even before scrolling all the way down. */
-#sb-back, #ls-back, #htp-start, #bonus-howto-start {
+#sb-back, #ls-back, #htp-start, #bonus-howto-start, #dash-howto-start {
   position: sticky;
   bottom: 0;
   flex-shrink: 0;
@@ -998,9 +1114,13 @@ canvas#game {
 .bh-grid .htp-item:nth-child(2) { border-left-color: #c98a5a; }
 .bh-grid .htp-item:nth-child(3) { border-left-color: #ffe27a; }
 .bh-grid .htp-item:nth-child(4) { border-left-color: #ff7a8a; }
+.dh-grid .htp-item:nth-child(1) { border-left-color: #c98a5a; }
+.dh-grid .htp-item:nth-child(2) { border-left-color: #ffd23f; }
+.dh-grid .htp-item:nth-child(3) { border-left-color: #ffe27a; }
+.dh-grid .htp-item:nth-child(5) { border-left-color: #ff7a8a; }
 
 /* soft golden glow behind the instruction screens */
-#howtoplay, #bonus-howto {
+#howtoplay, #bonus-howto, #dash-howto {
   background:
     radial-gradient(ellipse at 50% 0%, rgba(255,196,0,0.10), rgba(0,0,0,0) 55%),
     rgba(10,11,16,0.94);

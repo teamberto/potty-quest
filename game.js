@@ -44,6 +44,8 @@
   const menuUnlockBtn = document.getElementById('menu-unlock');
   const menuGiftBtn = document.getElementById('menu-gift');
   const menuCapBtn = document.getElementById('menu-cap');
+  const dashHowtoEl = document.getElementById('dash-howto');
+  const dashHowtoStartBtn = document.getElementById('dash-howto-start');
   const paywallEl = document.getElementById('paywall');
   const pwBuyBtn = document.getElementById('pw-buy');
   const pwRestoreBtn = document.getElementById('pw-restore');
@@ -803,7 +805,7 @@
   // ---------- Unlock Everything ($3.99 one-time purchase, via RevenueCat) ----------
   const IAP_PRODUCT_ID = 'com.teamberto.pottychamp.unlock_all';
   const RC_API_KEY = 'appl_DzkhSMlcqYjSmxIwrNlbVwRiRmD'; // starts with appl_
-  const DASH_DEMO_METERS = 150; // free players run this far, then the pitch
+  const DASH_DEMO_METERS = 200; // free players run this far, then the pitch
 
   const Store = (() => {
     let product = null;
@@ -1441,6 +1443,19 @@
   function markDashTutSeen() {
     try { localStorage.setItem('pottychamp_dash_tut', '1'); } catch (e) {}
   }
+  function hasSeenDashHowto() {
+    try { return localStorage.getItem('pottychamp_dash_howto') === '1'; } catch (e) { return false; }
+  }
+  function markDashHowtoSeen() {
+    try { localStorage.setItem('pottychamp_dash_howto', '1'); } catch (e) {}
+  }
+  // First Dash ever: read the rules screen, THEN the hands-on tutorial.
+  function openDash() {
+    if (hasSeenDashHowto()) { startDash(); return; }
+    hideMenu();
+    hideOverlay();
+    dashHowtoEl.classList.remove('hidden');
+  }
   function dashJump() {
     if (dashJumpT > 0) return;
     dashJumpT = DASH_JUMP_TIME;
@@ -1820,18 +1835,6 @@
         ctx.beginPath();
         ctx.ellipse(ox, o.y + 6, 34, 15, 0, 0, Math.PI * 2);
         ctx.fill();
-        // slowly rotating dashed hazard ring
-        ctx.save();
-        ctx.translate(ox, o.y);
-        ctx.rotate(now / 900);
-        ctx.strokeStyle = `rgba(255,120,90,${(0.55 + 0.3 * pulse).toFixed(3)})`;
-        ctx.lineWidth = 3;
-        ctx.setLineDash([7, 6]);
-        ctx.beginPath();
-        ctx.arc(0, 0, 27, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
         const size = o.type === 'cart' ? 46 : 40; // BIG — see it coming from far away
         ctx.drawImage(images[o.type], ox - size / 2, o.y - size / 2, size, size);
         // bobbing warning sign overhead
@@ -2159,14 +2162,19 @@
   menuIntroBtn.addEventListener('click', startIntro);
   if (menuLevelsBtn) menuLevelsBtn.addEventListener('click', openLevelSelect);
   if (menuEndlessBtn) menuEndlessBtn.addEventListener('click', startEndlessRun);
-  if (menuDashBtn) menuDashBtn.addEventListener('click', startDash);
+  if (menuDashBtn) menuDashBtn.addEventListener('click', openDash);
+  if (dashHowtoStartBtn) dashHowtoStartBtn.addEventListener('click', () => {
+    markDashHowtoSeen();
+    dashHowtoEl.classList.add('hidden');
+    startDash();
+  });
   if (menuMayhemBtn) menuMayhemBtn.addEventListener('click', () => {
     if (!isPremium()) { askToUnlock(); return; }
     startMayhem();
   });
   if (menuDailyBtn) menuDailyBtn.addEventListener('click', () => {
     const ty = dailyTypeToday().id;
-    if (ty === 'dash') startDash();
+    if (ty === 'dash') openDash();
     else if (ty === 'mayhem') startMayhem();
     else beginRun();
   });
