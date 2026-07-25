@@ -46,6 +46,23 @@
   const menuCapBtn = document.getElementById('menu-cap');
   const dashHowtoEl = document.getElementById('dash-howto');
   const dashHowtoStartBtn = document.getElementById('dash-howto-start');
+  const menuBuildBtn = document.getElementById('menu-build');
+  const myLevelsEl = document.getElementById('my-levels');
+  const mlGridEl = document.getElementById('ml-grid');
+  const mlBackBtn = document.getElementById('ml-back');
+  const editorEl = document.getElementById('editor');
+  const edNameEl = document.getElementById('ed-name');
+  const edBackBtn = document.getElementById('ed-back');
+  const edTestBtn = document.getElementById('ed-test');
+  const edSaveBtn = document.getElementById('ed-save');
+  const edKidsEl = document.getElementById('ed-kids');
+  const edDiffEl = document.getElementById('ed-diff');
+  const edGoalEl = document.getElementById('ed-goal');
+  const edPlanEl = document.getElementById('ed-plan');
+  const edToolsEl = document.getElementById('ed-tools');
+  const edTabsEl = document.getElementById('ed-tabs');
+  const edPaletteEl = document.getElementById('ed-palette');
+  const edHintEl = document.getElementById('ed-hint');
   const paywallEl = document.getElementById('paywall');
   const pwBuyBtn = document.getElementById('pw-buy');
   const pwRestoreBtn = document.getElementById('pw-restore');
@@ -530,7 +547,11 @@
   let mayhemMode = false;
   let mayhemSaves = 0;
   let mayhemAlertTimer = 2;
-  function worldNow() { return WORLDS[endlessMode ? endlessWorldIdx : worldIndex]; }
+  let customMode = false;   // playing a player-built stage
+  function worldNow() {
+    if (customMode) return CUSTOM_WORLD;
+    return WORLDS[endlessMode ? endlessWorldIdx : worldIndex];
+  }
   let timeRemaining = 0;
   let starsThisLevel = 0;
   let peesFixedThisLevel = 0;
@@ -730,6 +751,473 @@
   function isWorldPerfect(w) { return w.levels.every((_, i) => starsFor(w.id, i) >= 3); }
   function isLevelPlayable(w, idx) { return idx === 0 || starsFor(w.id, idx - 1) > 0; }
   function starString(n) { return '★'.repeat(n) + '☆'.repeat(Math.max(0, 3 - n)); }
+
+  // ================= LEVEL BUILDER =================
+  // Building is free (first FREE_STAGES stages). Playing a custom stage needs
+  // the Unlock Everything purchase — you design for free, you pay to press ▶.
+  const CUSTOM_KEY = 'pottychamp_custom_v1';
+  const FREE_STAGES = 2;
+  const MAX_STAGES = 12;
+
+  function loadCustom() {
+    try {
+      const a = JSON.parse(localStorage.getItem(CUSTOM_KEY));
+      return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+  }
+  let customLevels = loadCustom();
+  function saveCustom() {
+    try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(customLevels)); } catch (e) {}
+  }
+  function stageCap() { return isPremium() ? MAX_STAGES : FREE_STAGES; }
+
+  function blankStage(n) {
+    return {
+      name: `Stage ${n}`,
+      plan: 0,
+      floors: {},          // room index -> floor id
+      items: [],           // { type, x, y }
+      potty: { x: 10.5, y: 6 },
+      bigStart: { x: 4, y: 8 },
+      littleStart: { x: 14, y: 4 },
+      kids: 1,
+      diff: 1,
+      goal: 2,
+    };
+  }
+
+  // Turn a saved stage into a level object the existing engine understands.
+  function stageToLevel(st) {
+    const plan = BUILD_PLANS[st.plan] || BUILD_PLANS[0];
+    const rooms = plan.rooms.map((r, i) => Object.assign({}, r, { floor: st.floors[i] || 'floor_wood' }));
+    const furniture = st.items.map((it) => {
+      const sz = BUILD_SIZES[it.type] || [1, 1];
+      return {
+        type: it.type, x: it.x, y: it.y,
+        wTiles: sz[0], hTiles: sz[1],
+        blocking: BUILD_BLOCKING.indexOf(it.type) !== -1,
+      };
+    });
+    // a light in the middle of every room so custom stages look finished too
+    const lights = rooms.map((r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2, r: 70, warm: true }));
+    return Object.assign({
+      label: st.name || 'My Stage',
+      duration: 165,
+      rooms, furniture, lights,
+      pottySpots: [st.potty],
+      mopSpot: null,
+      bigStart: st.bigStart,
+      littleStart: st.littleStart,
+      peeGoal: st.goal, poopGoal: st.goal,
+      kids: st.kids,
+      custom: true,
+    }, BUILD_DIFFS[st.diff] || BUILD_DIFFS[1]);
+  }
+
+  // ---- validation: can Captain actually reach the potty and the kids? ----
+  function validateStage(st) {
+    const lv = stageToLevel(st);
+    const grid = [];
+    for (let y = 0; y < GRID_ROWS; y++) {
+      grid[y] = [];
+      for (let x = 0; x < GRID_COLS; x++) grid[y][x] = isWalkableTile(x, y, lv) ? 0 : 1;
+    }
+    for (const f of lv.furniture) {
+      if (!f.blocking) continue;
+      for (let dy = 0; dy < f.hTiles; dy++) {
+        for (let dx = 0; dx < f.wTiles; dx++) {
+          const x = f.x + dx, y = f.y + dy;
+          if (grid[y] && grid[y][x] !== undefined) grid[y][x] = 1;
+        }
+      }
+    }
+    const sx = Math.floor(lv.bigStart.x), sy = Math.floor(lv.bigStart.y);
+    if (!grid[sy] || grid[sy][sx] === 1) return { ok: false, msg: 'Captain is stuck in a wall! Move his start spot.' };
+    const seen = new Set([sx + ',' + sy]);
+    const q = [[sx, sy]];
+    while (q.length) {
+      const [cx, cy] = q.pop();
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= GRID_COLS || ny >= GRID_ROWS) continue;
+        if (grid[ny][nx] === 1 || seen.has(nx + ',' + ny)) continue;
+        seen.add(nx + ',' + ny);
+        q.push([nx, ny]);
+      }
+    }
+    const pk = Math.floor(lv.pottySpots[0].x) + ',' + Math.floor(lv.pottySpots[0].y);
+    const pk2 = (Math.floor(lv.pottySpots[0].x) - 1) + ',' + Math.floor(lv.pottySpots[0].y);
+    if (!seen.has(pk) && !seen.has(pk2)) return { ok: false, msg: "Champ can't reach the potty! Move it or clear a path." };
+    const lk = Math.floor(lv.littleStart.x) + ',' + Math.floor(lv.littleStart.y);
+    if (!seen.has(lk)) return { ok: false, msg: "Champ is stuck! Move where he starts." };
+    return { ok: true };
+  }
+
+  // ---- thumbnails for the My Levels cards ----
+  function stageThumb(st) {
+    const lv = stageToLevel(st);
+    const cv = document.createElement('canvas');
+    cv.width = GRID_COLS * TILE; cv.height = GRID_ROWS * TILE;
+    const c = cv.getContext('2d');
+    c.imageSmoothingEnabled = false;
+    c.fillStyle = '#12141c';
+    c.fillRect(0, 0, cv.width, cv.height);
+    for (let ty = 0; ty < GRID_ROWS; ty++) {
+      for (let tx = 0; tx < GRID_COLS; tx++) {
+        if (!isWalkableTile(tx, ty, lv)) continue;
+        const f = images[roomAt(tx, ty, lv) && roomAt(tx, ty, lv).floor || 'floor_wood'];
+        if (f) c.drawImage(f, tx * TILE, ty * TILE);
+      }
+    }
+    for (const f of lv.furniture) {
+      const img = images[f.type];
+      if (img) c.drawImage(img, f.x * TILE, f.y * TILE);
+    }
+    const p = images['potty'];
+    if (p) c.drawImage(p, lv.pottySpots[0].x * TILE - 12, lv.pottySpots[0].y * TILE - 12);
+    const bi = images.big_down_0;
+    if (bi) c.drawImage(bi, lv.bigStart.x * TILE, lv.bigStart.y * TILE);
+    const li = capSprite('little_down_0', progress.capColor || 'red');
+    if (li) c.drawImage(li, lv.littleStart.x * TILE, lv.littleStart.y * TILE);
+    return cv.toDataURL();
+  }
+  function roomAt(tx, ty, scene) {
+    const cx = tx + 0.5, cy = ty + 0.5;
+    for (const r of scene.rooms) {
+      if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) return r;
+    }
+    return null;
+  }
+
+  // ---------- My Levels screen ----------
+  function openMyLevels() {
+    hideMenu();
+    hideOverlay();
+    editorEl.classList.add('hidden');
+    gameState = 'myLevels';
+    renderMyLevels();
+    myLevelsEl.classList.remove('hidden');
+  }
+
+  function renderMyLevels() {
+    mlGridEl.innerHTML = '';
+    const cap = stageCap();
+    for (let i = 0; i < Math.max(customLevels.length + 1, FREE_STAGES + 1); i++) {
+      if (i >= MAX_STAGES) break;
+      const st = customLevels[i];
+      const card = document.createElement('div');
+      card.className = 'ml-card';
+      if (st) {
+        const d = BUILD_DIFFS[st.diff] || BUILD_DIFFS[1];
+        card.innerHTML =
+          `<img class="ml-thumb" src="${stageThumb(st)}" alt="">` +
+          `<span class="ml-name">${st.name}</span>` +
+          `<span class="ml-meta">${st.kids} champ${st.kids > 1 ? 's' : ''} · ${d.name} · ${st.goal}+${st.goal}</span>`;
+        const row = document.createElement('div');
+        row.className = 'ml-row';
+        const play = document.createElement('button');
+        play.className = 'ml-play';
+        play.innerHTML = isPremium() ? '▶ Play' : '\u{1F512} Play';
+        play.addEventListener('click', () => playStage(i));
+        const edit = document.createElement('button');
+        edit.innerHTML = '✏️ Edit';
+        edit.addEventListener('click', () => openEditor(i));
+        row.appendChild(play); row.appendChild(edit);
+        card.appendChild(row);
+      } else if (i < cap) {
+        card.className = 'ml-card empty';
+        card.innerHTML =
+          `<div class="ml-empty-thumb">➕</div>` +
+          `<span class="ml-name">New Stage</span>` +
+          `<span class="ml-meta">Build it your way</span>`;
+        const row = document.createElement('div');
+        row.className = 'ml-row';
+        const mk = document.createElement('button');
+        mk.className = 'ml-play';
+        mk.innerHTML = '\u{1F528} Build';
+        mk.addEventListener('click', () => openEditor(i));
+        row.appendChild(mk);
+        card.appendChild(row);
+      } else {
+        card.className = 'ml-card locked';
+        card.innerHTML =
+          `<div class="ml-empty-thumb">\u{1F512}</div>` +
+          `<span class="ml-name">Stage ${i + 1}</span>` +
+          `<span class="ml-meta">Unlock to build more</span>`;
+        const row = document.createElement('div');
+        row.className = 'ml-row';
+        const un = document.createElement('button');
+        un.className = 'ml-play';
+        un.innerHTML = '\u{1F513} Unlock';
+        un.addEventListener('click', () => askToUnlock());
+        row.appendChild(un);
+        card.appendChild(row);
+      }
+      mlGridEl.appendChild(card);
+    }
+  }
+
+  // ---------- The editor ----------
+  const ed = { idx: 0, st: null, tool: 'place', tab: 0, sel: null };
+
+  function openEditor(idx) {
+    ed.idx = idx;
+    ed.st = customLevels[idx] ? JSON.parse(JSON.stringify(customLevels[idx])) : blankStage(idx + 1);
+    ed.tool = 'place';
+    ed.tab = 0;
+    ed.sel = BUILD_PALETTE[0].items[0];
+    myLevelsEl.classList.add('hidden');
+    hideOverlay();
+    gameState = 'editor';
+    edNameEl.value = ed.st.name;
+    buildPlanSeg();
+    buildTabs();
+    buildPalette();
+    syncSegs();
+    setTool('place');
+    editorEl.classList.remove('hidden');
+  }
+
+  function buildPlanSeg() {
+    edPlanEl.innerHTML = '';
+    BUILD_PLANS.forEach((p, i) => {
+      const b = document.createElement('button');
+      b.textContent = i + 1;
+      b.title = p.name;
+      b.dataset.v = i;
+      if (i === ed.st.plan) b.className = 'on';
+      b.addEventListener('click', () => {
+        ed.st.plan = i;
+        // nudge anything now stranded outside the new plan back into bounds
+        const lv = stageToLevel(ed.st);
+        ed.st.items = ed.st.items.filter((it) => isWalkableTile(it.x, it.y, lv));
+        if (!isWalkableTile(Math.floor(ed.st.potty.x), Math.floor(ed.st.potty.y), lv)) ed.st.potty = firstFreeTile(lv, 0.5);
+        if (!isWalkableTile(Math.floor(ed.st.bigStart.x), Math.floor(ed.st.bigStart.y), lv)) ed.st.bigStart = firstFreeTile(lv);
+        if (!isWalkableTile(Math.floor(ed.st.littleStart.x), Math.floor(ed.st.littleStart.y), lv)) ed.st.littleStart = firstFreeTile(lv, 0, true);
+        buildPlanSeg();
+      });
+      edPlanEl.appendChild(b);
+    });
+  }
+  function firstFreeTile(lv, off, fromEnd) {
+    const xs = [];
+    for (let y = 0; y < GRID_ROWS; y++) for (let x = 0; x < GRID_COLS; x++) if (isWalkableTile(x, y, lv)) xs.push({ x, y });
+    const t = fromEnd ? xs[xs.length - 1] : xs[0];
+    return { x: t.x + (off || 0), y: t.y };
+  }
+
+  function buildTabs() {
+    edTabsEl.innerHTML = '';
+    BUILD_PALETTE.forEach((g, i) => {
+      const b = document.createElement('button');
+      b.textContent = g.tab;
+      if (i === ed.tab) b.className = 'on';
+      b.addEventListener('click', () => { ed.tab = i; buildTabs(); buildPalette(); });
+      edTabsEl.appendChild(b);
+    });
+  }
+
+  function buildPalette() {
+    edPaletteEl.innerHTML = '';
+    for (const type of BUILD_PALETTE[ed.tab].items) {
+      const b = document.createElement('button');
+      b.className = 'ed-item' + (ed.sel === type && ed.tool === 'place' ? ' on' : '');
+      b.innerHTML = `<img src="assets/${type}.png" alt="${type}">`;
+      b.addEventListener('click', () => { ed.sel = type; setTool('place'); buildPalette(); });
+      edPaletteEl.appendChild(b);
+    }
+  }
+
+  const TOOL_HINTS = {
+    place: 'Pick an item below, then tap the map to place it.',
+    erase: 'Tap any item on the map to remove it.',
+    floor: 'Tap a room to change its floor.',
+    potty: 'Tap where the potty should go.',
+    champ: 'Tap where Champ starts.',
+    captain: 'Tap where Captain starts.',
+  };
+  function setTool(t) {
+    ed.tool = t;
+    [...edToolsEl.querySelectorAll('.ed-tool')].forEach((b) => {
+      b.classList.toggle('on', b.dataset.tool === t);
+    });
+    edHintEl.textContent = TOOL_HINTS[t] || '';
+    if (t !== 'place') buildPalette();
+  }
+  edToolsEl.addEventListener('click', (e) => {
+    const b = e.target.closest('.ed-tool');
+    if (b) setTool(b.dataset.tool);
+  });
+
+  function segWire(el, key, cast) {
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      ed.st[key] = cast(b.dataset.v);
+      syncSegs();
+    });
+  }
+  segWire(edKidsEl, 'kids', Number);
+  segWire(edDiffEl, 'diff', Number);
+  segWire(edGoalEl, 'goal', Number);
+  function syncSegs() {
+    const mark = (el, v) => [...el.querySelectorAll('button')].forEach((b) => b.classList.toggle('on', Number(b.dataset.v) === v));
+    mark(edKidsEl, ed.st.kids);
+    mark(edDiffEl, ed.st.diff);
+    mark(edGoalEl, ed.st.goal);
+    [...edPlanEl.querySelectorAll('button')].forEach((b) => b.classList.toggle('on', Number(b.dataset.v) === ed.st.plan));
+  }
+
+  // Canvas taps -> tile coords (accounts for letterbox offset + scale)
+  function tapToTile(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const wx = (clientX - rect.left - offsetX) / scale;
+    const wy = (clientY - rect.top - offsetY) / scale;
+    return { x: Math.floor(wx / TILE), y: Math.floor(wy / TILE) };
+  }
+
+  function editorTap(clientX, clientY) {
+    const t = tapToTile(clientX, clientY);
+    if (t.x < 0 || t.y < 0 || t.x >= GRID_COLS || t.y >= GRID_ROWS) return;
+    const lv = stageToLevel(ed.st);
+    const inRoom = isWalkableTile(t.x, t.y, lv);
+    if (ed.tool === 'erase') {
+      for (let i = ed.st.items.length - 1; i >= 0; i--) {
+        const it = ed.st.items[i];
+        const sz = BUILD_SIZES[it.type] || [1, 1];
+        if (t.x >= it.x && t.x < it.x + sz[0] && t.y >= it.y && t.y < it.y + sz[1]) {
+          ed.st.items.splice(i, 1);
+          AudioFX.catch();
+          return;
+        }
+      }
+      return;
+    }
+    if (ed.tool === 'floor') {
+      const rooms = lv.rooms;
+      for (let i = 0; i < rooms.length; i++) {
+        const r = rooms[i];
+        const cx = t.x + 0.5, cy = t.y + 0.5;
+        if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
+          const cur = BUILD_FLOORS.findIndex((f) => f.id === (ed.st.floors[i] || 'floor_wood'));
+          ed.st.floors[i] = BUILD_FLOORS[(cur + 1) % BUILD_FLOORS.length].id;
+          AudioFX.catch();
+          return;
+        }
+      }
+      return;
+    }
+    if (!inRoom) { showBanner('Inside the rooms only!', '#ff9d3f'); return; }
+    if (ed.tool === 'potty') { ed.st.potty = { x: t.x + 0.5, y: t.y }; AudioFX.powerup(); return; }
+    if (ed.tool === 'champ') { ed.st.littleStart = { x: t.x, y: t.y }; AudioFX.powerup(); return; }
+    if (ed.tool === 'captain') { ed.st.bigStart = { x: t.x, y: t.y }; AudioFX.powerup(); return; }
+    // place — keep big items fully inside the room
+    const sz = BUILD_SIZES[ed.sel] || [1, 1];
+    for (let dy = 0; dy < sz[1]; dy++) {
+      for (let dx = 0; dx < sz[0]; dx++) {
+        if (!isWalkableTile(t.x + dx, t.y + dy, lv)) { showBanner("It doesn't fit there!", '#ff9d3f'); return; }
+      }
+    }
+    if (ed.st.items.length >= 60) { showBanner('That’s plenty of stuff!', '#ff9d3f'); return; }
+    ed.st.items.push({ type: ed.sel, x: t.x, y: t.y });
+    AudioFX.catch();
+  }
+
+  function drawEditor() {
+    const lv = stageToLevel(ed.st);
+    drawTilemap(lv);
+    drawLights(lv);
+    // grid so tapping feels precise
+    ctx.strokeStyle = 'rgba(255,255,255,0.09)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= GRID_COLS; x++) {
+      ctx.beginPath(); ctx.moveTo(x * TILE, 0); ctx.lineTo(x * TILE, WORLD_H); ctx.stroke();
+    }
+    for (let y = 0; y <= GRID_ROWS; y++) {
+      ctx.beginPath(); ctx.moveTo(0, y * TILE); ctx.lineTo(WORLD_W, y * TILE); ctx.stroke();
+    }
+    // placed items, depth sorted
+    const ds = lv.furniture.map((f) => ({ img: images[f.type], x: f.x * TILE, y: f.y * TILE, sortY: f.y * TILE + f.hTiles * TILE }));
+    ds.sort((a, b) => a.sortY - b.sortY);
+    for (const d of ds) if (d.img) ctx.drawImage(d.img, d.x, d.y);
+    // potty + start markers
+    const p = images['potty'];
+    if (p) ctx.drawImage(p, lv.pottySpots[0].x * TILE - 12, lv.pottySpots[0].y * TILE - 12);
+    const bi = images.big_down_0;
+    if (bi) ctx.drawImage(bi, lv.bigStart.x * TILE, lv.bigStart.y * TILE);
+    const li = capSprite('little_down_0', progress.capColor || 'red');
+    if (li) {
+      for (let k = 0; k < ed.st.kids; k++) {
+        ctx.drawImage(k ? capSprite('little_down_0', 'teal') : li, lv.littleStart.x * TILE + k * TILE, lv.littleStart.y * TILE);
+      }
+    }
+    // labels so it's obvious which marker is which
+    ctx.font = '700 8px -apple-system';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9fe8a9';
+    ctx.fillText('CAPTAIN', lv.bigStart.x * TILE + 12, lv.bigStart.y * TILE - 3);
+    ctx.fillStyle = '#ffd23f';
+    ctx.fillText('CHAMP', lv.littleStart.x * TILE + 12, lv.littleStart.y * TILE - 3);
+    ctx.fillStyle = '#6fb3ff';
+    ctx.fillText('POTTY', lv.pottySpots[0].x * TILE, lv.pottySpots[0].y * TILE - 15);
+    ctx.textAlign = 'left';
+    drawBanner();
+  }
+
+  // ---------- play a custom stage ----------
+  function playStage(idx) {
+    const st = customLevels[idx];
+    if (!st) return;
+    if (!isPremium()) { askToUnlock(); return; }   // build free, pay to play
+    const v = validateStage(st);
+    if (!v.ok) { showBanner(v.msg, '#ff7a8a'); return; }
+    myLevelsEl.classList.add('hidden');
+    editorEl.classList.add('hidden');
+    customMode = true;
+    endlessMode = false;
+    mayhemMode = false;
+    customIdx = idx;
+    starsTotal = 0; accidentsTotal = 0; scoreTotal = 0;
+    peeSavedRun = 0; poopSavedRun = 0;
+    level = stageToLevel(st);
+    levelIndex = 0;
+    initLevelState();
+  }
+  let customIdx = 0;
+
+  edBackBtn.addEventListener('click', () => { editorEl.classList.add('hidden'); openMyLevels(); });
+  edNameEl.addEventListener('input', () => { ed.st.name = edNameEl.value.slice(0, 18) || `Stage ${ed.idx + 1}`; });
+  edSaveBtn.addEventListener('click', () => {
+    const v = validateStage(ed.st);
+    if (!v.ok) { showBanner(v.msg, '#ff7a8a'); return; }
+    customLevels[ed.idx] = JSON.parse(JSON.stringify(ed.st));
+    saveCustom();
+    AudioFX.fanfare();
+    editorEl.classList.add('hidden');
+    // Second stage finished and still free? That's the moment to pitch.
+    const justHitCap = !isPremium() && customLevels.filter(Boolean).length >= FREE_STAGES;
+    openMyLevels();
+    if (justHitCap) {
+      gameState = 'buildPitch';
+      myLevelsEl.classList.add('hidden');
+      showOverlay(
+        '\u{1F528} You’re a Level Designer!',
+        `“${ed.st.name}” is saved. Unlock Everything to <strong>play your stages</strong> and build up to ${MAX_STAGES} of them — plus the Park, Store, School, Dash and Mayhem.`,
+        `\u{1F513} Unlock Everything — ${Store.priceString()}`
+      );
+      overlayQuitBtn.classList.remove('hidden');
+    }
+  });
+  edTestBtn.addEventListener('click', () => {
+    const v = validateStage(ed.st);
+    if (!v.ok) { showBanner(v.msg, '#ff7a8a'); return; }
+    if (!isPremium()) { askToUnlock(); return; }
+    customLevels[ed.idx] = JSON.parse(JSON.stringify(ed.st));
+    saveCustom();
+    editorEl.classList.add('hidden');
+    playStage(ed.idx);
+  });
+  mlBackBtn.addEventListener('click', () => { myLevelsEl.classList.add('hidden'); showMenu(); });
 
   // ---------- Sticker book ----------
   const STICKERS = [
@@ -1280,13 +1768,16 @@
       if (mayhemSaves >= 15) awardSticker('mayhem_15');
       if (mayhemSaves >= 10) completeDaily('mayhem');
     }
+    const wasCustom = customMode;
     mayhemMode = false;
     endlessMode = false;
+    customMode = false;
     dashTut = null;
     dashSwipeX = null; dashSwipeY = null;
     heartsEl.style.display = '';
     particles.length = 0;
     AudioFX.stopAll();
+    if (wasCustom) { openMyLevels(); return; } // straight back to their stages
     showMenu();
   }
 
@@ -1993,6 +2484,7 @@
   // swipe to change lanes / swipe up to jump (pointer events cover touch + mouse)
   canvas.addEventListener('pointerdown', (e) => {
     if (gameState === 'dash') { dashSwipeX = e.clientX; dashSwipeY = e.clientY; }
+    else if (gameState === 'editor') { e.preventDefault(); editorTap(e.clientX, e.clientY); }
   });
   canvas.addEventListener('pointerup', (e) => {
     if (gameState !== 'dash' || dashSwipeX === null) return;
@@ -2019,6 +2511,7 @@
     } else if (gameState === 'paused') {
       togglePause();
     } else if (gameState === 'levelComplete') {
+      if (customMode) { customMode = false; openMyLevels(); return; }
       // Bonus round only after every 2nd level (endless keeps one per day).
       if (!endlessMode && !level.bonusAfter) {
         hideOverlay();
@@ -2040,6 +2533,7 @@
       }
       advanceStory();
     } else if (gameState === 'gameOver') {
+      if (customMode) { playStage(customIdx); return; } // retry their own stage
       if (endlessMode) {
         endlessMode = false;
         showMenu();
@@ -2052,6 +2546,8 @@
       askToUnlock(); // parental gate first, then the paywall
     } else if (gameState === 'mayhemOver') {
       showMenu();
+    } else if (gameState === 'buildPitch') {
+      askToUnlock(); // parental gate, then the paywall
     } else if (gameState === 'gift') {
       openDailyGift();
     } else if (gameState === 'giftOpen') {
@@ -2065,6 +2561,7 @@
   function startRunAt(wIdx, lIdx) {
     endlessMode = false;
     mayhemMode = false;
+    customMode = false;
     worldIndex = wIdx;
     hideMenu();
     levelSelectEl.classList.add('hidden');
@@ -2187,6 +2684,7 @@
     else beginRun();
   });
   if (menuStickersBtn) menuStickersBtn.addEventListener('click', openStickerBook);
+  if (menuBuildBtn) menuBuildBtn.addEventListener('click', openMyLevels);
   if (menuGiftBtn) menuGiftBtn.addEventListener('click', () => {
     if (giftOpenedToday()) return;
     hideMenu();
@@ -2306,6 +2804,20 @@
     starsTotal += starsThisLevel;
     accidentsTotal += accidentsThisLevel;
     scoreTotal += scoreThisLevel;
+
+    // Custom stages: score only. No stars, no stickers, no bonus round — so a
+    // player can't build a trivial level and farm the whole sticker book.
+    if (customMode) {
+      celebrateTimer = 2.5;
+      celebrateTick = 0;
+      showOverlay(
+        `\u{1F528} ${level.label} cleared!`,
+        `Score: ${scoreThisLevel} pts &nbsp;|&nbsp; Accidents: ${accidentsThisLevel}` +
+        `<br><small>Your own stage — nice building!</small>`,
+        'Back to My Levels'
+      );
+      return;
+    }
 
     if (accidentsThisLevel === 0) {
       awardSticker('clean_level');
@@ -3514,6 +4026,7 @@
     }
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, (offsetX + shX) * dpr, (offsetY + shY) * dpr);
     if (gameState === 'intro') drawIntro();
+    else if (gameState === 'editor') drawEditor();
     else if (gameState === 'dash' || gameState === 'dashOver' || (gameState === 'paused' && pausedFrom === 'dash')) drawDash();
     else if (gameState === 'bonusRound' || gameState === 'bonusComplete' || (gameState === 'paused' && pausedFrom === 'bonusRound')) drawBonusRound();
     else draw();
@@ -3522,7 +4035,8 @@
     // Hide the HUD + touch controls on non-game screens (menu, intro, splash,
     // ending) so they don't bleed through the menu or sticker book.
     const onGameScreen = gameState !== 'splash' && gameState !== 'intro' && gameState !== 'menu'
-      && gameState !== 'ending' && gameState !== 'gift' && gameState !== 'giftOpen';
+      && gameState !== 'ending' && gameState !== 'gift' && gameState !== 'giftOpen'
+      && gameState !== 'editor' && gameState !== 'myLevels' && gameState !== 'buildPitch';
     gameContainerEl.classList.toggle('ui-hidden', !onGameScreen);
 
     requestAnimationFrame(loop);

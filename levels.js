@@ -302,6 +302,100 @@ const WORLDS = [
   { id: 'school', label: 'School', icon: 'chalkboard', momSalon: false, candy: true, twins: true, levels: LEVELS_SCHOOL },
 ];
 
+// ================= LEVEL BUILDER =================
+// Players build their own stages. Room shapes come from vetted presets so a
+// kid can never draw disconnected/unwinnable walkable space — every plan below
+// is a single connected region.
+const BUILD_PLANS = [
+  {
+    name: 'One Big Room',
+    rooms: [{ x: 1, y: 1, w: 19, h: 11 }],
+  },
+  {
+    name: 'Two Rooms + Hall',
+    rooms: [
+      { x: 1, y: 1, w: 8, h: 4 },
+      { x: 12, y: 1, w: 8, h: 4 },
+      { x: 1, y: 5, w: 19, h: 3 },
+    ],
+  },
+  {
+    name: 'Four Rooms',
+    rooms: [
+      { x: 1, y: 1, w: 8, h: 4 },
+      { x: 12, y: 1, w: 8, h: 4 },
+      { x: 1, y: 5, w: 19, h: 2 },
+      { x: 1, y: 7, w: 8, h: 5 },
+      { x: 12, y: 7, w: 8, h: 5 },
+    ],
+  },
+  {
+    name: 'The House',
+    rooms: [
+      { x: 1, y: 1, w: 8, h: 6 },
+      { x: 12, y: 1, w: 8, h: 6 },
+      { x: 1, y: 7, w: 19, h: 2 },
+      { x: 1, y: 9, w: 5, h: 4 },
+      { x: 7, y: 9, w: 8, h: 4 },
+      { x: 16, y: 9, w: 5, h: 4 },
+    ],
+  },
+  {
+    name: 'Long Hallway',
+    rooms: [
+      { x: 1, y: 1, w: 19, h: 3 },
+      { x: 1, y: 4, w: 4, h: 8 },
+      { x: 16, y: 4, w: 4, h: 8 },
+      { x: 1, y: 10, w: 19, h: 2 },
+    ],
+  },
+];
+
+// Floors a player can cycle a room through.
+const BUILD_FLOORS = [
+  { id: 'floor_wood', name: 'Wood' },
+  { id: 'floor_tile', name: 'Tile' },
+  { id: 'floor_carpet', name: 'Carpet' },
+  { id: 'floor_lino', name: 'Kitchen' },
+  { id: 'grass', name: 'Grass' },
+  { id: 'floor_store', name: 'Store' },
+];
+
+// Everything placeable, grouped into palette tabs.
+const BUILD_PALETTE = [
+  { tab: 'Home', items: ['couch', 'tv', 'table', 'oven_cake', 'crib', 'toybox', 'laundry', 'bookshelf', 'plant', 'rug', 'nail_table'] },
+  { tab: 'Park', items: ['tree', 'bench', 'swingset', 'slide', 'sandbox', 'pool', 'hot_tub'] },
+  { tab: 'Store', items: ['shelf', 'cart'] },
+  { tab: 'School', items: ['desk', 'chalkboard'] },
+  { tab: 'Toys', items: ['toy_baseball', 'toy_football', 'toy_soccerball', 'toy_poolring', 'prop_blocks', 'prop_bowl', 'prop_cup', 'prop_socks', 'prop_slippers'] },
+];
+
+// Which placed items actually block movement (the rest are decoration).
+const BUILD_BLOCKING = [
+  'couch', 'tv', 'table', 'oven_cake', 'crib', 'toybox', 'laundry', 'bookshelf',
+  'plant', 'nail_table', 'tree', 'bench', 'swingset', 'slide', 'sandbox', 'pool',
+  'hot_tub', 'shelf', 'cart', 'desk', 'chalkboard',
+];
+
+// Multi-tile footprints, so big items reserve the right space.
+const BUILD_SIZES = {
+  couch: [3, 1], swingset: [4, 3], slide: [4, 3], sandbox: [3, 2],
+  pool: [6, 4], hot_tub: [2, 2], shelf: [2, 1], chalkboard: [2, 1],
+};
+
+// The three difficulty tiers behind the 😊 / 😐 / 😤 picker.
+const BUILD_DIFFS = [
+  { name: 'Easy',   alertMin: 9,   alertMax: 13,  wanderSpeed: 34, fleeSpeed: 58,  alertTimeLimit: 14 },
+  { name: 'Normal', alertMin: 6.5, alertMax: 9.5, wanderSpeed: 50, fleeSpeed: 84,  alertTimeLimit: 11 },
+  { name: 'Hard',   alertMin: 4,   alertMax: 6,   wanderSpeed: 66, fleeSpeed: 110, alertTimeLimit: 8 },
+];
+
+// Custom stages run in their own pseudo-world: no salon, no twins, no candy.
+const CUSTOM_WORLD = {
+  id: 'custom', label: 'My Levels', icon: 'potty',
+  momSalon: false, candy: false, twins: false, levels: [],
+};
+
 // ---------- Backyard bonus round (runs after every 2nd level) ----------
 const TOY_TYPES = ['toy_baseball', 'toy_football', 'toy_soccerball', 'toy_poolring'];
 

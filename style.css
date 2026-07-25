@@ -210,7 +210,7 @@ canvas#game {
 #menu-start:active { transform: scale(0.96); }
 
 /* Mode buttons: same hero treatment as Story, gold-outline variant */
-#menu-levels, #menu-dash, #menu-mayhem, #menu-daily, #menu-gift, #menu-cap, #menu-endless, #menu-stickers {
+#menu-levels, #menu-dash, #menu-mayhem, #menu-daily, #menu-build, #menu-gift, #menu-cap, #menu-endless, #menu-stickers {
   min-width: 320px;
   padding: 14px 36px;
   font-size: 18px;
@@ -223,9 +223,18 @@ canvas#game {
   -webkit-tap-highlight-color: transparent;
 }
 #menu-levels:active, #menu-dash:active, #menu-mayhem:active, #menu-gift:active,
-#menu-cap:active, #menu-daily:active, #menu-endless:active, #menu-stickers:active {
+#menu-build:active, #menu-cap:active, #menu-daily:active, #menu-endless:active,
+#menu-stickers:active {
   transform: scale(0.96);
   background: rgba(255,196,0,0.28);
+}
+
+/* Level Builder gets its own blue treatment — it's a headline feature */
+#menu-build {
+  border-color: #6fb3ff;
+  background: linear-gradient(180deg, rgba(111,179,255,0.22), rgba(60,120,220,0.12));
+  color: #cfe4ff;
+  box-shadow: 0 4px 16px rgba(111,179,255,0.25);
 }
 #menu-endless.hidden, #menu-dash.hidden, #menu-cap.hidden { display: none; }
 
@@ -740,6 +749,251 @@ canvas#game {
   -webkit-tap-highlight-color: transparent;
 }
 #dash-howto-start:active { transform: scale(0.96); }
+
+/* ================= My Levels ================= */
+#my-levels {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255,196,0,0.10), rgba(0,0,0,0) 55%),
+    rgba(10,11,16,0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+#my-levels.hidden { display: none; }
+#ml-box {
+  width: 100%;
+  max-width: 520px;
+  max-height: 94vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  color: #fff;
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+#ml-box h1 {
+  font-size: 26px;
+  font-weight: 900;
+  background: linear-gradient(180deg, #ffe27a, #ff9d00);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+#ml-sub { font-size: 13px; color: #d8dae2; max-width: 400px; line-height: 1.4; }
+#ml-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ml-card {
+  background: rgba(255,255,255,0.06);
+  border: 2px solid rgba(255,255,255,0.14);
+  border-radius: 14px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.ml-card.locked { opacity: 0.5; }
+.ml-card.empty { border-style: dashed; }
+.ml-thumb {
+  width: 100%;
+  aspect-ratio: 22 / 14;
+  border-radius: 8px;
+  background: #12141c;
+  image-rendering: pixelated;
+  object-fit: cover;
+}
+.ml-empty-thumb {
+  width: 100%;
+  aspect-ratio: 22 / 14;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  color: #ffc400;
+}
+.ml-name { font-size: 13px; font-weight: 800; color: #ffe27a; }
+.ml-meta { font-size: 11px; color: #b9bcc6; }
+.ml-row { display: flex; gap: 6px; }
+.ml-row button {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 10px;
+  border: none;
+  background: rgba(255,196,0,0.20);
+  color: #ffe27a;
+  -webkit-tap-highlight-color: transparent;
+}
+.ml-row button.ml-play { background: #ffc400; color: #1a1a1a; }
+.ml-row button:active { transform: scale(0.96); }
+#ml-back {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+  margin-top: 4px;
+  padding: 12px 34px;
+  font-size: 16px;
+  font-weight: 800;
+  border-radius: 24px;
+  border: 2px solid rgba(255,255,255,0.2);
+  background: rgba(20,22,30,0.95);
+  color: #fff;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ================= Level editor ================= */
+#editor {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  pointer-events: none; /* the map itself stays tappable underneath */
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+#editor.hidden { display: none; }
+#editor > * { pointer-events: auto; }
+#ed-top {
+  display: flex;
+  gap: 6px;
+  padding: calc(env(safe-area-inset-top, 0px) + 6px) 8px 6px;
+  background: linear-gradient(180deg, rgba(8,9,14,0.92), rgba(8,9,14,0.55));
+  align-items: center;
+}
+#ed-name {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 10px;
+  border: 2px solid rgba(255,196,0,0.4);
+  background: rgba(255,255,255,0.08);
+  color: #ffe27a;
+}
+.ed-btn {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.2);
+  background: rgba(20,22,30,0.9);
+  color: #fff;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed-btn:active { transform: scale(0.95); }
+.ed-btn.ed-go { border-color: #6fd878; color: #b6f0bd; }
+.ed-btn.ed-save { border-color: #ffc400; color: #ffe27a; }
+#ed-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 8px 6px;
+  background: rgba(8,9,14,0.55);
+}
+.ed-opt { display: flex; align-items: center; gap: 5px; }
+.ed-opt-label { font-size: 10px; font-weight: 800; color: #9fa3ad; text-transform: uppercase; }
+.ed-seg { display: flex; gap: 3px; }
+.ed-seg button {
+  min-width: 30px;
+  padding: 5px 7px;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
+  color: #cfd2da;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed-seg button.on { background: #ffc400; color: #1a1a1a; border-color: #ffc400; }
+#ed-hint {
+  font-size: 11px;
+  color: #ffd98a;
+  text-align: center;
+  padding: 4px 10px;
+  background: rgba(8,9,14,0.6);
+}
+#ed-tools {
+  display: flex;
+  gap: 5px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  background: rgba(8,9,14,0.85);
+}
+.ed-tool {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
+  color: #cfd2da;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed-tool.on { background: #6fb3ff; color: #08101c; border-color: #6fb3ff; }
+#ed-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 4px 8px;
+  overflow-x: auto;
+  background: rgba(8,9,14,0.9);
+}
+#ed-tabs button {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.05);
+  color: #b9bcc6;
+  -webkit-tap-highlight-color: transparent;
+}
+#ed-tabs button.on { background: #ffc400; color: #1a1a1a; border-color: #ffc400; }
+#ed-palette {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 8px);
+  overflow-x: auto;
+  background: rgba(8,9,14,0.95);
+  align-items: center;
+}
+.ed-item {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed-item img { width: 32px; height: 32px; image-rendering: pixelated; }
+.ed-item.on { border-color: #ffc400; background: rgba(255,196,0,0.22); }
+/* editor strips scroll horizontally without eating vertical flicks */
+#ed-tools, #ed-tabs, #ed-palette, #ed-opts { touch-action: pan-x; }
+#my-levels, #my-levels * { touch-action: pan-y; }
 
 /* ---- World / level select ---- */
 #level-select {
