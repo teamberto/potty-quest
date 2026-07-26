@@ -858,10 +858,10 @@
     return Object.assign({
       label: st.name || 'My Stage',
       rooms, furniture, lights,
-      pottySpots: [st.potty],
+      pottySpots: [st.potty || { x: 11.5, y: 6 }],
       mopSpot: null,
-      bigStart: st.bigStart,
-      littleStart: st.littleStart,
+      bigStart: st.bigStart || { x: 8, y: 8 },
+      littleStart: st.littleStart || { x: 14, y: 5 },
       custom: true,
     }, buildTuning(storyProgressT()));
   }
@@ -906,10 +906,14 @@
   }
 
   // ---- thumbnails for the My Levels cards ----
+  // Returns a <canvas> to drop straight into the card. Deliberately NOT
+  // toDataURL() — exporting taints under file:// and some WebViews, and one
+  // SecurityError used to take the whole My Levels screen down with it.
   function stageThumb(st) {
     const lv = stageToLevel(st);
     const cv = document.createElement('canvas');
     cv.width = GRID_COLS * TILE; cv.height = GRID_ROWS * TILE;
+    cv.className = 'ml-thumb';
     const c = cv.getContext('2d');
     c.imageSmoothingEnabled = false;
     c.fillStyle = '#12141c';
@@ -917,7 +921,8 @@
     for (let ty = 0; ty < GRID_ROWS; ty++) {
       for (let tx = 0; tx < GRID_COLS; tx++) {
         if (!isWalkableTile(tx, ty, lv)) continue;
-        const f = images[roomAt(tx, ty, lv) && roomAt(tx, ty, lv).floor || 'floor_wood'];
+        const r = roomAt(tx, ty, lv);
+        const f = images[(r && r.floor) || 'floor_wood'];
         if (f) c.drawImage(f, tx * TILE, ty * TILE);
       }
     }
@@ -925,14 +930,16 @@
       const img = images[f.type];
       if (img) c.drawImage(img, f.x * TILE, f.y * TILE);
     }
+    const spot = lv.pottySpots && lv.pottySpots[0];
     const p = images['potty'];
-    if (p) c.drawImage(p, lv.pottySpots[0].x * TILE - 12, lv.pottySpots[0].y * TILE - 12);
+    if (p && spot) c.drawImage(p, spot.x * TILE - 12, spot.y * TILE - 12);
     const bi = images.big_down_0;
-    if (bi) c.drawImage(bi, lv.bigStart.x * TILE, lv.bigStart.y * TILE);
+    if (bi && lv.bigStart) c.drawImage(bi, lv.bigStart.x * TILE, lv.bigStart.y * TILE);
     const li = capSprite('little_down_0', progress.capColor || 'red');
-    if (li) c.drawImage(li, lv.littleStart.x * TILE, lv.littleStart.y * TILE);
-    return cv.toDataURL();
+    if (li && lv.littleStart) c.drawImage(li, lv.littleStart.x * TILE, lv.littleStart.y * TILE);
+    return cv;
   }
+
   function roomAt(tx, ty, scene) {
     const cx = tx + 0.5, cy = ty + 0.5;
     for (const r of scene.rooms) {
@@ -946,9 +953,17 @@
     hideMenu();
     hideOverlay();
     editorEl.classList.add('hidden');
+    if (buildHowtoEl) buildHowtoEl.classList.add('hidden');
     gameState = 'myLevels';
-    renderMyLevels();
+    // Show the panel BEFORE drawing the cards. If a card ever blows up, the
+    // player still has a screen with a Back button instead of a frozen game.
     myLevelsEl.classList.remove('hidden');
+    try {
+      renderMyLevels();
+    } catch (e) {
+      mlGridEl.innerHTML = '';
+      showBanner('Could not draw your levels — tap Back.', '#ff9d3f');
+    }
   }
 
   function renderMyLevels() {
@@ -956,57 +971,89 @@
     const cap = stageCap();
     const slots = visibleSlots();
     for (let i = 0; i < slots; i++) {
-      const st = customLevels[i];
-      const card = document.createElement('div');
-      card.className = 'ml-card';
-      if (st) {
-        const roomCount = (st.rooms || []).length;
-        card.innerHTML =
-          `<img class="ml-thumb" src="${stageThumb(st)}" alt="">` +
-          `<span class="ml-name">${st.name}</span>` +
-          `<span class="ml-meta">${roomCount} room${roomCount === 1 ? '' : 's'} · ${(st.items || []).length} things</span>`;
-        const row = document.createElement('div');
-        row.className = 'ml-row';
-        const play = document.createElement('button');
-        play.className = 'ml-play';
-        play.innerHTML = isPremium() ? '▶ Play' : '\u{1F512} Play';
-        play.addEventListener('click', () => playStage(i));
-        const edit = document.createElement('button');
-        edit.innerHTML = '✏️ Edit';
-        edit.addEventListener('click', () => openEditor(i));
-        row.appendChild(play); row.appendChild(edit);
-        card.appendChild(row);
-      } else if (i < cap) {
-        card.className = 'ml-card empty';
-        card.innerHTML =
-          `<div class="ml-empty-thumb">➕</div>` +
-          `<span class="ml-name">New Stage</span>` +
-          `<span class="ml-meta">Build it your way</span>`;
-        const row = document.createElement('div');
-        row.className = 'ml-row';
-        const mk = document.createElement('button');
-        mk.className = 'ml-play';
-        mk.innerHTML = '\u{1F528} Build';
-        mk.addEventListener('click', () => openEditor(i));
-        row.appendChild(mk);
-        card.appendChild(row);
-      } else {
-        card.className = 'ml-card locked';
-        card.innerHTML =
-          `<div class="ml-empty-thumb">\u{1F512}</div>` +
-          `<span class="ml-name">Stage ${i + 1}</span>` +
-          `<span class="ml-meta">Unlock to build more</span>`;
-        const row = document.createElement('div');
-        row.className = 'ml-row';
-        const un = document.createElement('button');
-        un.className = 'ml-play';
-        un.innerHTML = '\u{1F513} Unlock';
-        un.addEventListener('click', () => askToUnlock());
-        row.appendChild(un);
-        card.appendChild(row);
+      // One broken stage must never cost the player the whole screen.
+      try {
+        mlGridEl.appendChild(buildLevelCard(i, cap));
+      } catch (e) {
+        mlGridEl.appendChild(brokenCard(i));
       }
-      mlGridEl.appendChild(card);
     }
+  }
+
+  function cardButton(cls, label, onClick) {
+    const b = document.createElement('button');
+    if (cls) b.className = cls;
+    b.innerHTML = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function buildLevelCard(i, cap) {
+    const st = customLevels[i];
+    const card = document.createElement('div');
+    const row = document.createElement('div');
+    row.className = 'ml-row';
+
+    if (st) {
+      card.className = 'ml-card';
+      let thumb = null;
+      try { thumb = stageThumb(st); } catch (e) { thumb = null; }
+      if (thumb) {
+        card.appendChild(thumb);
+      } else {
+        const ph = document.createElement('div');
+        ph.className = 'ml-empty-thumb';
+        ph.innerHTML = '\u{1F3E0}';
+        card.appendChild(ph);
+      }
+      const name = document.createElement('span');
+      name.className = 'ml-name';
+      name.textContent = st.name || 'My Stage';
+      card.appendChild(name);
+      const meta = document.createElement('span');
+      meta.className = 'ml-meta';
+      const rc = (st.rooms || []).length;
+      meta.textContent = `${rc} room${rc === 1 ? '' : 's'} \u00B7 ${(st.items || []).length} things`;
+      card.appendChild(meta);
+
+      row.appendChild(cardButton('ml-play', isPremium() ? '\u25B6 Play' : '\u{1F512} Play', () => playStage(i)));
+      row.appendChild(cardButton('', '\u270F\u{FE0F} Edit', () => openEditor(i)));
+    } else if (i < cap) {
+      card.className = 'ml-card empty';
+      card.innerHTML =
+        `<div class="ml-empty-thumb">\u2795</div>` +
+        `<span class="ml-name">New Stage</span>` +
+        `<span class="ml-meta">Build it your way</span>`;
+      row.appendChild(cardButton('ml-play', '\u{1F528} Build', () => openEditor(i)));
+    } else {
+      card.className = 'ml-card locked';
+      card.innerHTML =
+        `<div class="ml-empty-thumb">\u{1F512}</div>` +
+        `<span class="ml-name">Stage ${i + 1}</span>` +
+        `<span class="ml-meta">Unlock to build more</span>`;
+      row.appendChild(cardButton('ml-play', '\u{1F513} Unlock', () => askToUnlock()));
+    }
+    card.appendChild(row);
+    return card;
+  }
+
+  // Last resort so a corrupt save is recoverable instead of fatal.
+  function brokenCard(i) {
+    const card = document.createElement('div');
+    card.className = 'ml-card empty';
+    card.innerHTML =
+      `<div class="ml-empty-thumb">\u26A0\u{FE0F}</div>` +
+      `<span class="ml-name">Stage ${i + 1}</span>` +
+      `<span class="ml-meta">Something went wrong</span>`;
+    const row = document.createElement('div');
+    row.className = 'ml-row';
+    row.appendChild(cardButton('ml-play', '\u{1F504} Start Over', () => {
+      customLevels[i] = undefined;
+      saveCustom();
+      renderMyLevels();
+    }));
+    card.appendChild(row);
+    return card;
   }
 
   // ---------- The editor ----------

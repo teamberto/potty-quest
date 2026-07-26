@@ -979,8 +979,12 @@ canvas#game {
 }
 .ml-card.locked { opacity: 0.5; }
 .ml-card.empty { border-style: dashed; }
+/* Now a live <canvas>, not an <img> — height must come from the ratio, and
+   the intrinsic canvas size must not blow the card out. */
 .ml-thumb {
+  display: block;
   width: 100%;
+  height: auto;
   aspect-ratio: 22 / 14;
   border-radius: 8px;
   background: #12141c;

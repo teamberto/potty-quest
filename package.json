@@ -6,7 +6,8 @@
   "scripts": {
     "build:www": "rm -rf www && mkdir -p www && cp index.html game.js levels.js style.css www/ && cp -r assets www/assets",
     "ios:sync": "npm run build:www && npx cap sync ios",
-    "ios:open": "npx cap open ios"
+    "ios:open": "npx cap open ios",
+    "test": "node test/my-levels.test.js"
   },
   "dependencies": {
     "@capacitor/core": "^8.0.0",
