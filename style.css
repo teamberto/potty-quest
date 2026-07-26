@@ -1034,7 +1034,7 @@ canvas#game {
   position: absolute;
   inset: 0;
   z-index: 16;
-  pointer-events: none; /* the map itself stays tappable underneath */
+  pointer-events: none; /* the map in the middle stays fully tappable */
   font-family: -apple-system, "Helvetica Neue", sans-serif;
   display: flex;
   flex-direction: column;
@@ -1042,29 +1042,31 @@ canvas#game {
 }
 #editor.hidden { display: none; }
 #editor > * { pointer-events: auto; }
+
+/* ---- Top bar: back, name, save. Nothing else. ---- */
 #ed-top {
   display: flex;
-  gap: 6px;
-  padding: calc(env(safe-area-inset-top, 0px) + 6px) 8px 6px;
-  background: linear-gradient(180deg, rgba(8,9,14,0.92), rgba(8,9,14,0.55));
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top, 0px) + 6px) 10px 8px;
+  background: linear-gradient(180deg, rgba(8,9,14,0.92), rgba(8,9,14,0));
   align-items: center;
 }
 #ed-name {
   flex: 1;
   min-width: 0;
-  padding: 8px 10px;
-  font-size: 14px;
+  padding: 8px 12px;
+  font-size: 15px;
   font-weight: 700;
-  border-radius: 10px;
-  border: 2px solid rgba(255,196,0,0.4);
-  background: rgba(255,255,255,0.08);
+  border-radius: 12px;
+  border: 2px solid rgba(255,196,0,0.35);
+  background: rgba(10,11,16,0.75);
   color: #ffe27a;
 }
 .ed-btn {
-  padding: 8px 12px;
-  font-size: 13px;
+  padding: 9px 14px;
+  font-size: 14px;
   font-weight: 800;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 2px solid rgba(255,255,255,0.2);
   background: rgba(20,22,30,0.9);
   color: #fff;
@@ -1072,72 +1074,62 @@ canvas#game {
   -webkit-tap-highlight-color: transparent;
 }
 .ed-btn:active { transform: scale(0.95); }
-.ed-btn.ed-go { border-color: #6fd878; color: #b6f0bd; }
-.ed-btn.ed-save { border-color: #ffc400; color: #ffe27a; }
-#ed-opts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 8px 6px;
-  background: rgba(8,9,14,0.55);
+.ed-btn.ed-save { background: #ffc400; border-color: #ffc400; color: #1a1a1a; }
+
+/* ---- One dock at the bottom. Everything lives here. ---- */
+#ed-dock {
+  background: linear-gradient(180deg, rgba(8,9,14,0), rgba(8,9,14,0.9) 14px, rgba(8,9,14,0.97));
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
 }
-.ed-opt { display: flex; align-items: center; gap: 5px; }
-.ed-opt-label { font-size: 10px; font-weight: 800; color: #9fa3ad; text-transform: uppercase; }
-.ed-seg { display: flex; gap: 3px; }
-.ed-seg button {
-  min-width: 30px;
-  padding: 5px 7px;
-  font-size: 12px;
-  font-weight: 800;
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.06);
-  color: #cfd2da;
-  -webkit-tap-highlight-color: transparent;
-}
-.ed-seg button.on { background: #ffc400; color: #1a1a1a; border-color: #ffc400; }
 #ed-hint {
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 700;
   color: #ffd98a;
   text-align: center;
-  padding: 4px 10px;
-  background: rgba(8,9,14,0.6);
+  padding: 8px 12px 4px;
 }
-#ed-tools {
-  display: flex;
-  gap: 5px;
-  padding: 6px 8px;
-  overflow-x: auto;
-  background: rgba(8,9,14,0.85);
-}
-.ed-tool {
-  flex: 0 0 auto;
-  padding: 7px 10px;
-  font-size: 12px;
-  font-weight: 800;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.06);
-  color: #cfd2da;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-}
-.ed-tool.on { background: #6fb3ff; color: #08101c; border-color: #6fb3ff; }
-/* ---- Item picker: a stack of sideways-scrolling shelves ---- */
-#ed-palette {
-  background: rgba(8,9,14,0.95);
-  padding: 2px 0 calc(env(safe-area-inset-bottom, 0px) + 6px);
-  max-height: 38vh;
+/* The drawer only takes space when the active tool actually needs it. */
+#ed-drawer:empty { display: none; }
+#ed-drawer {
+  max-height: 27vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
-.ed-row { padding: 3px 0 5px; }
+
+/* Four big mode buttons — the whole toolbar */
+#ed-tools {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px 2px;
+}
+.ed-tool {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 4px 7px;
+  border-radius: 14px;
+  border: 2px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.06);
+  color: #cfd2da;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed-tool-icon { font-size: 20px; line-height: 1; }
+.ed-tool-name { font-size: 11px; font-weight: 800; }
+.ed-tool.on { background: #6fb3ff; color: #08101c; border-color: #9ccdff; }
+.ed-tool:active { transform: scale(0.96); }
+
+/* ---- Stuff drawer: sideways-scrolling shelves, one per category ---- */
+.ed-row { padding: 2px 0 4px; }
 .ed-row + .ed-row { border-top: 1px solid rgba(255,255,255,0.06); }
 .ed-row-title {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding: 3px 10px 2px;
+  padding: 3px 12px 2px;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.6px;
@@ -1153,19 +1145,20 @@ canvas#game {
 }
 .ed-row-strip {
   display: flex;
-  gap: 6px;
-  padding: 0 10px 2px;
+  gap: 7px;
+  padding: 0 12px 2px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
+  touch-action: pan-x;
 }
 .ed-row-strip::-webkit-scrollbar { display: none; }
 .ed-item {
   flex: 0 0 auto;
-  width: 54px;
-  padding: 5px 2px 4px;
-  border-radius: 10px;
+  width: 58px;
+  padding: 6px 2px 5px;
+  border-radius: 12px;
   border: 2px solid rgba(255,255,255,0.16);
   background: rgba(255,255,255,0.06);
   display: flex;
@@ -1175,9 +1168,9 @@ canvas#game {
   scroll-snap-align: start;
   -webkit-tap-highlight-color: transparent;
 }
-.ed-item img { width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; }
+.ed-item img { width: 34px; height: 34px; object-fit: contain; image-rendering: pixelated; }
 .ed-item-name {
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 700;
   line-height: 1.1;
   color: #b9bcc6;
@@ -1189,9 +1182,40 @@ canvas#game {
 }
 .ed-item.on { border-color: #ffc400; background: rgba(255,196,0,0.22); }
 .ed-item.on .ed-item-name { color: #ffe27a; }
-/* horizontal strips shouldn't eat the vertical flick that scrolls the picker */
-#ed-tools, #ed-opts, .ed-row-strip { touch-action: pan-x; }
-#ed-palette { touch-action: pan-y; }
+
+/* ---- Floor drawer: one row of big swatches ---- */
+#ed-floors {
+  display: flex;
+  gap: 8px;
+  padding: 4px 12px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+#ed-floors::-webkit-scrollbar { display: none; }
+.ed-floor {
+  flex: 0 0 auto;
+  width: 62px;
+  padding: 5px 2px 4px;
+  border-radius: 12px;
+  border: 2px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+.ed-floor img {
+  width: 40px; height: 26px;
+  object-fit: cover;
+  border-radius: 5px;
+  image-rendering: pixelated;
+}
+.ed-floor span { font-size: 9px; font-weight: 700; color: #b9bcc6; }
+.ed-floor.on { border-color: #ffc400; background: rgba(255,196,0,0.22); }
+.ed-floor.on span { color: #ffe27a; }
+
 #my-levels, #my-levels * { touch-action: pan-y; }
 
 /* ---- World / level select ---- */

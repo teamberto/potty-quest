@@ -170,45 +170,28 @@
   <div id="editor" class="hidden">
     <div id="ed-top">
       <button id="ed-back" class="ed-btn">&#8592;</button>
-      <input id="ed-name" maxlength="18" placeholder="Stage name">
-      <button id="ed-test" class="ed-btn ed-go">&#9654; Test</button>
-      <button id="ed-save" class="ed-btn ed-save">&#128190; Save</button>
+      <input id="ed-name" maxlength="18" placeholder="Name your stage">
+      <button id="ed-save" class="ed-btn ed-save">Save</button>
     </div>
-    <div id="ed-opts">
-      <div class="ed-opt">
-        <span class="ed-opt-label">Champs</span>
-        <div class="ed-seg" id="ed-kids">
-          <button data-v="1" class="on">1</button><button data-v="2">2</button><button data-v="3">3</button>
-        </div>
-      </div>
-      <div class="ed-opt">
-        <span class="ed-opt-label">Difficulty</span>
-        <div class="ed-seg" id="ed-diff">
-          <button data-v="0">&#128522;</button><button data-v="1" class="on">&#128528;</button><button data-v="2">&#128548;</button>
-        </div>
-      </div>
-      <div class="ed-opt">
-        <span class="ed-opt-label">Goal</span>
-        <div class="ed-seg" id="ed-goal">
-          <button data-v="1">1+1</button><button data-v="2" class="on">2+2</button><button data-v="3">3+3</button><button data-v="4">4+4</button>
-        </div>
-      </div>
-      <div class="ed-opt">
-        <span class="ed-opt-label">Starter shape</span>
-        <div class="ed-seg" id="ed-plan"></div>
+
+    <div id="ed-dock">
+      <div id="ed-hint">Drag on the map to draw a room.</div>
+      <div id="ed-drawer"></div>
+      <div id="ed-tools">
+        <button data-tool="room" class="ed-tool on">
+          <span class="ed-tool-icon">&#127968;</span><span class="ed-tool-name">Rooms</span>
+        </button>
+        <button data-tool="place" class="ed-tool">
+          <span class="ed-tool-icon">&#129681;</span><span class="ed-tool-name">Stuff</span>
+        </button>
+        <button data-tool="floor" class="ed-tool">
+          <span class="ed-tool-icon">&#129525;</span><span class="ed-tool-name">Floor</span>
+        </button>
+        <button data-tool="erase" class="ed-tool">
+          <span class="ed-tool-icon">&#129529;</span><span class="ed-tool-name">Erase</span>
+        </button>
       </div>
     </div>
-    <div id="ed-hint">Tap the map to place. Tap a floor to change it with the &#129525; tool.</div>
-    <div id="ed-tools">
-      <button data-tool="place" class="ed-tool on">&#9998; Place</button>
-      <button data-tool="room" class="ed-tool">&#127968; Room</button>
-      <button data-tool="erase" class="ed-tool">&#129529; Erase</button>
-      <button data-tool="floor" class="ed-tool">&#129525; Floor</button>
-      <button data-tool="potty" class="ed-tool">&#128701; Potty</button>
-      <button data-tool="champ" class="ed-tool">&#128118; Champ</button>
-      <button data-tool="captain" class="ed-tool">&#129399; Captain</button>
-    </div>
-    <div id="ed-palette"></div>
   </div>
 
   <div id="dash-howto" class="hidden">

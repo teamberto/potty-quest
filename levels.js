@@ -303,9 +303,32 @@ const WORLDS = [
 ];
 
 // ================= LEVEL BUILDER =================
-// Players build their own stages. Room shapes come from vetted presets so a
-// kid can never draw disconnected/unwinnable walkable space — every plan below
-// is a single connected region.
+// Players draw their own rooms by dragging on the map. There are no settings
+// to pick: difficulty, goals and start spots are all derived from how far the
+// player has gotten in Story Mode, so a builder screen is only ever a map, a
+// shelf of stuff, and four buttons.
+
+// Every new stage opens with one starter room in the middle so a kid has
+// something to fill in immediately instead of staring at an empty grid.
+const BUILD_STARTER_ROOM = { x: 7, y: 4, w: 9, h: 6 };
+
+// The Story Mode ramp, reused verbatim so a custom stage feels like a real
+// level. `t` is 0 for a brand-new player and 1 once Home is cleared.
+function buildTuning(t) {
+  return {
+    duration: 165,
+    alertMin: +(9 - 5.5 * t).toFixed(2),
+    alertMax: +(13 - 7.5 * t).toFixed(2),
+    wanderSpeed: Math.round(34 + 32 * t),
+    fleeSpeed: Math.round(58 + 50 * t),
+    alertTimeLimit: +((14 - 6.5 * t)).toFixed(2),
+    peeGoal: Math.max(1, Math.min(4, Math.round(1 + 3 * t))),
+    poopGoal: Math.max(1, Math.min(4, Math.round(1 + 3 * t))),
+    kids: t >= 0.8 ? 2 : 1,
+  };
+}
+
+// Kept only so stages saved by older builds still load.
 const BUILD_PLANS = [
   {
     name: 'One Big Room',

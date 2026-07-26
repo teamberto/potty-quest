@@ -58,14 +58,9 @@
   const editorEl = document.getElementById('editor');
   const edNameEl = document.getElementById('ed-name');
   const edBackBtn = document.getElementById('ed-back');
-  const edTestBtn = document.getElementById('ed-test');
   const edSaveBtn = document.getElementById('ed-save');
-  const edKidsEl = document.getElementById('ed-kids');
-  const edDiffEl = document.getElementById('ed-diff');
-  const edGoalEl = document.getElementById('ed-goal');
-  const edPlanEl = document.getElementById('ed-plan');
   const edToolsEl = document.getElementById('ed-tools');
-  const edPaletteEl = document.getElementById('ed-palette');
+  const edDrawerEl = document.getElementById('ed-drawer');
   const edHintEl = document.getElementById('ed-hint');
   const paywallEl = document.getElementById('paywall');
   const pwBuyBtn = document.getElementById('pw-buy');
@@ -779,7 +774,7 @@
   function loadCustom() {
     try {
       const a = JSON.parse(localStorage.getItem(CUSTOM_KEY));
-      return Array.isArray(a) ? a : [];
+      return Array.isArray(a) ? a.map((st) => (st ? migrateStage(st) : st)) : [];
     } catch (e) { return []; }
   }
   let customLevels = loadCustom();
@@ -799,28 +794,44 @@
   function blankStage(n) {
     return {
       name: `Stage ${n}`,
-      plan: 0,
       floors: {},          // room index -> floor id
-      rooms: [],           // player-drawn rooms, appended after the plan's rooms
+      rooms: [Object.assign({}, BUILD_STARTER_ROOM)],
       items: [],           // { type, x, y }
-      potty: { x: 10.5, y: 6 },
-      bigStart: { x: 4, y: 8 },
-      littleStart: { x: 14, y: 4 },
-      kids: 1,
-      diff: 1,
-      goal: 2,
+      potty: { x: 11.5, y: 6 },
+      bigStart: { x: 8, y: 8 },
+      littleStart: { x: 14, y: 5 },
     };
   }
 
-  // Turn a saved stage into a level object the existing engine understands.
-  // How many rooms come from the chosen starter plan — anything past this index
-  // was drawn by the player and can be deleted again.
-  function planRoomCount(st) {
-    return (BUILD_PLANS[st.plan] || BUILD_PLANS[0]).rooms.length;
+  // Stages saved by older builds carry plan/kids/diff/goal. Fold the plan's
+  // rooms into the drawn-room list once, then those fields stop mattering.
+  function migrateStage(st) {
+    if (!Array.isArray(st.rooms)) st.rooms = [];
+    if (st.plan !== undefined) {
+      const planRooms = (BUILD_PLANS[st.plan] || BUILD_PLANS[0]).rooms.map((r) => Object.assign({}, r));
+      st.rooms = planRooms.concat(st.rooms);
+      delete st.plan;
+    }
+    delete st.kids; delete st.diff; delete st.goal;
+    if (!st.rooms.length) st.rooms = [Object.assign({}, BUILD_STARTER_ROOM)];
+    return st;
   }
+
+  // How far into Story Mode is this player? 0 for a beginner, 1 once Home is
+  // cleared. Custom stages ride this same curve, so nobody has to pick a
+  // difficulty and nobody's first build is brutal.
+  function storyProgressT() {
+    const home = WORLDS[0];
+    if (!home || !home.levels.length) return 0;
+    let cleared = 0;
+    for (let i = 0; i < home.levels.length; i++) if (starsFor(home.id, i) > 0) cleared++;
+    return Math.max(0, Math.min(1, cleared / (home.levels.length - 1)));
+  }
+
+  // Turn a saved stage into a level object the existing engine understands.
+  // Every room is player-drawn now, so every room can be deleted again.
   function allStageRooms(st) {
-    const plan = BUILD_PLANS[st.plan] || BUILD_PLANS[0];
-    return plan.rooms.concat(st.rooms || []);
+    return st.rooms || [];
   }
 
   function stageToLevel(st) {
@@ -837,16 +848,13 @@
     const lights = rooms.map((r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2, r: 70, warm: true }));
     return Object.assign({
       label: st.name || 'My Stage',
-      duration: 165,
       rooms, furniture, lights,
       pottySpots: [st.potty],
       mopSpot: null,
       bigStart: st.bigStart,
       littleStart: st.littleStart,
-      peeGoal: st.goal, poopGoal: st.goal,
-      kids: st.kids,
       custom: true,
-    }, BUILD_DIFFS[st.diff] || BUILD_DIFFS[1]);
+    }, buildTuning(storyProgressT()));
   }
 
   // ---- validation: can Captain actually reach the potty and the kids? ----
@@ -943,11 +951,11 @@
       const card = document.createElement('div');
       card.className = 'ml-card';
       if (st) {
-        const d = BUILD_DIFFS[st.diff] || BUILD_DIFFS[1];
+        const roomCount = (st.rooms || []).length;
         card.innerHTML =
           `<img class="ml-thumb" src="${stageThumb(st)}" alt="">` +
           `<span class="ml-name">${st.name}</span>` +
-          `<span class="ml-meta">${st.kids} champ${st.kids > 1 ? 's' : ''} · ${d.name} · ${st.goal}+${st.goal}</span>`;
+          `<span class="ml-meta">${roomCount} room${roomCount === 1 ? '' : 's'} · ${(st.items || []).length} things</span>`;
         const row = document.createElement('div');
         row.className = 'ml-row';
         const play = document.createElement('button');
@@ -993,7 +1001,7 @@
   }
 
   // ---------- The editor ----------
-  const ed = { idx: 0, st: null, tool: 'place', tab: 0, sel: null, drag: null };
+  const ed = { idx: 0, st: null, tool: 'room', sel: null, floor: 'floor_wood', drag: null };
 
   // ---- drawing rooms ----
   const MIN_ROOM = 3;       // no rooms too small to walk through
@@ -1057,6 +1065,7 @@
     const r = { x, y, w, h };
     st.rooms.push(r);
     connectRoom(st, r);
+    autoPlaceMarkers(st);
     AudioFX.powerup();
     return true;
   }
@@ -1076,95 +1085,174 @@
     return false;
   }
 
+  // ---- the potty and the two kids place themselves ----
+  // Nobody picks start spots. The potty goes in the first room drawn; Champ and
+  // Captain get the two open tiles that are furthest apart, so there's always a
+  // real chase. Recomputed any time the rooms change.
+  function autoPlaceMarkers(st) {
+    const rooms = allStageRooms(st);
+    if (!rooms.length) return;
+    const lv = { rooms };
+
+    // Open = inside a room AND not under a blocking item.
+    const open = [];
+    for (let y = 0; y < GRID_ROWS; y++) {
+      open[y] = [];
+      for (let x = 0; x < GRID_COLS; x++) open[y][x] = isWalkableTile(x, y, lv);
+    }
+    for (const it of st.items) {
+      if (BUILD_BLOCKING.indexOf(it.type) === -1) continue;
+      const sz = BUILD_SIZES[it.type] || [1, 1];
+      for (let dy = 0; dy < sz[1]; dy++) {
+        for (let dx = 0; dx < sz[0]; dx++) {
+          const x = it.x + dx, y = it.y + dy;
+          if (open[y] && open[y][x] !== undefined) open[y][x] = false;
+        }
+      }
+    }
+
+    // Everyone has to live in the SAME walkable blob, or the stage is a dud.
+    // Find the biggest one and only ever place inside it.
+    const seen = [];
+    for (let y = 0; y < GRID_ROWS; y++) seen[y] = [];
+    let best = [];
+    for (let y = 0; y < GRID_ROWS; y++) {
+      for (let x = 0; x < GRID_COLS; x++) {
+        if (!open[y][x] || seen[y][x]) continue;
+        const blob = [];
+        const q = [[x, y]];
+        seen[y][x] = true;
+        while (q.length) {
+          const [cx, cy] = q.pop();
+          blob.push({ x: cx, y: cy });
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = cx + dx, ny = cy + dy;
+            if (nx < 0 || ny < 0 || nx >= GRID_COLS || ny >= GRID_ROWS) continue;
+            if (!open[ny][nx] || seen[ny][nx]) continue;
+            seen[ny][nx] = true;
+            q.push([nx, ny]);
+          }
+        }
+        if (blob.length > best.length) best = blob;
+      }
+    }
+    if (!best.length) return;   // fully boxed in — leave the old spots, validate will shout
+
+    // potty: the spot in that blob nearest the middle of the first room drawn
+    const f = rooms[0];
+    const fx = f.x + f.w / 2, fy = f.y + f.h / 2;
+    let pot = best[0], pd = Infinity;
+    for (const t of best) {
+      const d = Math.abs(t.x - fx) + Math.abs(t.y - fy);
+      if (d < pd) { pd = d; pot = t; }
+    }
+    st.potty = { x: pot.x + 0.5, y: pot.y };
+
+    // Champ and Captain: the two spots in that blob furthest apart, so there's
+    // always a real chase. Sampled, because this runs on every edit.
+    let a = best[0], b = best[best.length - 1], bd = -1;
+    const step = Math.max(1, Math.floor(best.length / 45));
+    for (let i = 0; i < best.length; i += step) {
+      for (let j = i + step; j < best.length; j += step) {
+        const d = Math.abs(best[i].x - best[j].x) + Math.abs(best[i].y - best[j].y);
+        if (d > bd) { bd = d; a = best[i]; b = best[j]; }
+      }
+    }
+    // Captain starts on the side nearer the potty so he isn't hopeless
+    const dA = Math.abs(a.x - pot.x) + Math.abs(a.y - pot.y);
+    const dB = Math.abs(b.x - pot.x) + Math.abs(b.y - pot.y);
+    st.bigStart = dA < dB ? { x: a.x, y: a.y } : { x: b.x, y: b.y };
+    st.littleStart = dA < dB ? { x: b.x, y: b.y } : { x: a.x, y: a.y };
+  }
+
   // After the walkable space changes, sweep anything now floating in the void
-  // back onto solid ground.
+  // back onto solid ground and re-seat the markers.
   function reseatStage(st) {
     const lv = stageToLevel(st);
     st.items = st.items.filter((it) => isWalkableTile(it.x, it.y, lv));
-    if (!isWalkableTile(Math.floor(st.potty.x), Math.floor(st.potty.y), lv)) st.potty = firstFreeTile(lv, 0.5);
-    if (!isWalkableTile(Math.floor(st.bigStart.x), Math.floor(st.bigStart.y), lv)) st.bigStart = firstFreeTile(lv);
-    if (!isWalkableTile(Math.floor(st.littleStart.x), Math.floor(st.littleStart.y), lv)) st.littleStart = firstFreeTile(lv, 0, true);
+    autoPlaceMarkers(st);
   }
 
   function openEditor(idx) {
     ed.idx = idx;
-    ed.st = customLevels[idx] ? JSON.parse(JSON.stringify(customLevels[idx])) : blankStage(idx + 1);
-    if (!Array.isArray(ed.st.rooms)) ed.st.rooms = [];   // stages saved before rooms existed
-    ed.tool = 'place';
-    ed.tab = 0;
+    ed.st = customLevels[idx] ? migrateStage(JSON.parse(JSON.stringify(customLevels[idx]))) : blankStage(idx + 1);
     ed.drag = null;
     ed.sel = BUILD_PALETTE[0].items[0];
+    autoPlaceMarkers(ed.st);
     myLevelsEl.classList.add('hidden');
     hideOverlay();
     gameState = 'editor';
     edNameEl.value = ed.st.name;
-    buildPlanSeg();
-    buildPalette();
-    syncSegs();
-    setTool('place');
+    setTool('room');            // opens ready to draw — the first thing a kid needs
     editorEl.classList.remove('hidden');
   }
 
-  function buildPlanSeg() {
-    edPlanEl.innerHTML = '';
-    BUILD_PLANS.forEach((p, i) => {
-      const b = document.createElement('button');
-      b.textContent = i + 1;
-      b.title = p.name;
-      b.dataset.v = i;
-      if (i === ed.st.plan) b.className = 'on';
-      b.addEventListener('click', () => {
-        ed.st.plan = i;
-        reseatStage(ed.st);   // nudge anything now stranded in the void back inside
-        buildPlanSeg();
-      });
-      edPlanEl.appendChild(b);
-    });
-  }
-  function firstFreeTile(lv, off, fromEnd) {
-    const xs = [];
-    for (let y = 0; y < GRID_ROWS; y++) for (let x = 0; x < GRID_COLS; x++) if (isWalkableTile(x, y, lv)) xs.push({ x, y });
-    const t = fromEnd ? xs[xs.length - 1] : xs[0];
-    return { x: t.x + (off || 0), y: t.y };
+  // ---- the dock drawer: only the active tool's controls, nothing else ----
+  function buildDrawer() {
+    edDrawerEl.innerHTML = '';
+    if (ed.tool === 'place') { buildStuffDrawer(); return; }
+    if (ed.tool === 'floor') { buildFloorDrawer(); return; }
+    // room + erase need no controls — the map is the control
   }
 
-  // The picker is a stack of sideways-scrolling shelves — one per category —
-  // so nothing is hidden behind a tab a kid has to find first.
-  function buildPalette() {
-    edPaletteEl.innerHTML = '';
+  function buildStuffDrawer() {
     BUILD_PALETTE.forEach((g) => {
       const row = document.createElement('div');
       row.className = 'ed-row';
-
       const title = document.createElement('div');
       title.className = 'ed-row-title';
       title.innerHTML = `<span>${g.icon || ''} ${g.tab}</span><span class="ed-row-swipe">swipe &#8250;</span>`;
       row.appendChild(title);
-
       const strip = document.createElement('div');
       strip.className = 'ed-row-strip';
       for (const type of g.items) {
         const b = document.createElement('button');
-        b.className = 'ed-item' + (ed.sel === type && ed.tool === 'place' ? ' on' : '');
+        b.className = 'ed-item' + (ed.sel === type ? ' on' : '');
         b.innerHTML =
           `<img src="assets/${type}.png" alt="">` +
           `<span class="ed-item-name">${BUILD_NAMES[type] || type}</span>`;
-        b.addEventListener('click', () => { ed.sel = type; setTool('place'); buildPalette(); });
+        b.addEventListener('click', () => {
+          ed.sel = type;
+          edHintEl.textContent = `Tap the map to put down a ${(BUILD_NAMES[type] || type).toLowerCase()}.`;
+          buildStuffDrawerMarks();
+        });
         strip.appendChild(b);
       }
       row.appendChild(strip);
-      edPaletteEl.appendChild(row);
+      edDrawerEl.appendChild(row);
+    });
+  }
+  // cheap re-highlight so tapping an item doesn't rebuild (and reset) the scroll
+  function buildStuffDrawerMarks() {
+    [...edDrawerEl.querySelectorAll('.ed-item')].forEach((b) => {
+      const n = b.querySelector('.ed-item-name');
+      b.classList.toggle('on', !!n && n.textContent === (BUILD_NAMES[ed.sel] || ed.sel));
     });
   }
 
+  function buildFloorDrawer() {
+    const wrap = document.createElement('div');
+    wrap.id = 'ed-floors';
+    BUILD_FLOORS.forEach((f) => {
+      const b = document.createElement('button');
+      b.className = 'ed-floor' + (ed.floor === f.id ? ' on' : '');
+      b.innerHTML = `<img src="assets/${f.id}.png" alt=""><span>${f.name}</span>`;
+      b.addEventListener('click', () => {
+        ed.floor = f.id;
+        edHintEl.textContent = `Tap a room to make it ${f.name.toLowerCase()}.`;
+        [...wrap.querySelectorAll('.ed-floor')].forEach((o) => o.classList.remove('on'));
+        b.classList.add('on');
+      });
+      wrap.appendChild(b);
+    });
+    edDrawerEl.appendChild(wrap);
+  }
+
   const TOOL_HINTS = {
+    room: 'Drag on the map to draw a room. Tap a room to take it away.',
     place: 'Pick something below, then tap the map to put it down.',
-    room: 'Drag on the map to draw a new room. Tap a room you drew to remove it.',
-    erase: 'Tap any item on the map to remove it.',
-    floor: 'Tap a room to change its floor.',
-    potty: 'Tap where the potty should go.',
-    champ: 'Tap where Champ starts.',
-    captain: 'Tap where Captain starts.',
+    floor: 'Pick a floor, then tap a room to change it.',
+    erase: 'Tap anything on the map to take it away.',
   };
   function setTool(t) {
     ed.tool = t;
@@ -1172,31 +1260,12 @@
       b.classList.toggle('on', b.dataset.tool === t);
     });
     edHintEl.textContent = TOOL_HINTS[t] || '';
-    if (t !== 'place') buildPalette();
+    buildDrawer();
   }
   edToolsEl.addEventListener('click', (e) => {
     const b = e.target.closest('.ed-tool');
     if (b) setTool(b.dataset.tool);
   });
-
-  function segWire(el, key, cast) {
-    el.addEventListener('click', (e) => {
-      const b = e.target.closest('button');
-      if (!b) return;
-      ed.st[key] = cast(b.dataset.v);
-      syncSegs();
-    });
-  }
-  segWire(edKidsEl, 'kids', Number);
-  segWire(edDiffEl, 'diff', Number);
-  segWire(edGoalEl, 'goal', Number);
-  function syncSegs() {
-    const mark = (el, v) => [...el.querySelectorAll('button')].forEach((b) => b.classList.toggle('on', Number(b.dataset.v) === v));
-    mark(edKidsEl, ed.st.kids);
-    mark(edDiffEl, ed.st.diff);
-    mark(edGoalEl, ed.st.goal);
-    [...edPlanEl.querySelectorAll('button')].forEach((b) => b.classList.toggle('on', Number(b.dataset.v) === ed.st.plan));
-  }
 
   // Canvas taps -> tile coords (accounts for letterbox offset + scale)
   function tapToTile(clientX, clientY) {
@@ -1226,8 +1295,10 @@
     if (!d) return;
     const tiny = Math.abs(d.x1 - d.x0) < 1 && Math.abs(d.y1 - d.y0) < 1;
     if (tiny) {
-      // treated as a tap: remove a room they drew, if that's what they hit
-      if (!deleteDrawnRoomAt(ed.st, d.x0, d.y0)) {
+      // treated as a tap: take away the room they hit
+      if (ed.st.rooms.length <= 1) {
+        showBanner('Keep at least one room!', '#ff9d3f');
+      } else if (!deleteDrawnRoomAt(ed.st, d.x0, d.y0)) {
         showBanner('Drag to draw a room!', '#ff9d3f');
       }
       return;
@@ -1239,7 +1310,9 @@
     const t = tapToTile(clientX, clientY);
     if (t.x < 0 || t.y < 0 || t.x >= GRID_COLS || t.y >= GRID_ROWS) return;
     const lv = stageToLevel(ed.st);
-    const inRoom = isWalkableTile(t.x, t.y, lv);
+
+    // One eraser for everything: it takes the thing on top first, and if the
+    // tile is bare it takes the room. A kid only has to learn "tap to remove."
     if (ed.tool === 'erase') {
       for (let i = ed.st.items.length - 1; i >= 0; i--) {
         const it = ed.st.items[i];
@@ -1250,35 +1323,39 @@
           return;
         }
       }
+      if (ed.st.rooms.length > 1) {
+        if (deleteDrawnRoomAt(ed.st, t.x, t.y)) return;
+      } else if (isWalkableTile(t.x, t.y, lv)) {
+        showBanner('Keep at least one room!', '#ff9d3f');
+      }
       return;
     }
+
     if (ed.tool === 'floor') {
       const rooms = lv.rooms;
       for (let i = 0; i < rooms.length; i++) {
         const r = rooms[i];
         const cx = t.x + 0.5, cy = t.y + 0.5;
         if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
-          const cur = BUILD_FLOORS.findIndex((f) => f.id === (ed.st.floors[i] || 'floor_wood'));
-          ed.st.floors[i] = BUILD_FLOORS[(cur + 1) % BUILD_FLOORS.length].id;
+          ed.st.floors[i] = ed.floor;
           AudioFX.catch();
           return;
         }
       }
       return;
     }
-    if (!inRoom) { showBanner('Inside the rooms only!', '#ff9d3f'); return; }
-    if (ed.tool === 'potty') { ed.st.potty = { x: t.x + 0.5, y: t.y }; AudioFX.powerup(); return; }
-    if (ed.tool === 'champ') { ed.st.littleStart = { x: t.x, y: t.y }; AudioFX.powerup(); return; }
-    if (ed.tool === 'captain') { ed.st.bigStart = { x: t.x, y: t.y }; AudioFX.powerup(); return; }
-    // place — keep big items fully inside the room
+
+    // place — keep big items fully inside a room
+    if (!isWalkableTile(t.x, t.y, lv)) { showBanner('Put it inside a room!', '#ff9d3f'); return; }
     const sz = BUILD_SIZES[ed.sel] || [1, 1];
     for (let dy = 0; dy < sz[1]; dy++) {
       for (let dx = 0; dx < sz[0]; dx++) {
         if (!isWalkableTile(t.x + dx, t.y + dy, lv)) { showBanner("It doesn't fit there!", '#ff9d3f'); return; }
       }
     }
-    if (ed.st.items.length >= 60) { showBanner('That’s plenty of stuff!', '#ff9d3f'); return; }
+    if (ed.st.items.length >= 60) { showBanner('That\u2019s plenty of stuff!', '#ff9d3f'); return; }
     ed.st.items.push({ type: ed.sel, x: t.x, y: t.y });
+    autoPlaceMarkers(ed.st);
     AudioFX.catch();
   }
 
@@ -1306,7 +1383,7 @@
     if (bi) ctx.drawImage(bi, lv.bigStart.x * TILE, lv.bigStart.y * TILE);
     const li = capSprite('little_down_0', progress.capColor || 'red');
     if (li) {
-      for (let k = 0; k < ed.st.kids; k++) {
+      for (let k = 0; k < (lv.kids || 1); k++) {
         ctx.drawImage(k ? capSprite('little_down_0', 'teal') : li, lv.littleStart.x * TILE + k * TILE, lv.littleStart.y * TILE);
       }
     }
@@ -1324,12 +1401,11 @@
     // With the room tool up, outline the rooms the player drew so it's obvious
     // which ones they're allowed to tap away.
     if (ed.tool === 'room') {
-      const start = planRoomCount(ed.st);
       ctx.save();
       ctx.strokeStyle = 'rgba(111,179,255,0.85)';
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 4]);
-      for (let i = start; i < lv.rooms.length; i++) {
+      for (let i = 0; i < lv.rooms.length; i++) {
         const r = lv.rooms[i];
         ctx.strokeRect(r.x * TILE, r.y * TILE, r.w * TILE, r.h * TILE);
       }
@@ -1396,15 +1472,6 @@
       );
       overlayQuitBtn.classList.remove('hidden');
     }
-  });
-  edTestBtn.addEventListener('click', () => {
-    const v = validateStage(ed.st);
-    if (!v.ok) { showBanner(v.msg, '#ff7a8a'); return; }
-    if (!isPremium()) { askToUnlock(); return; }
-    customLevels[ed.idx] = JSON.parse(JSON.stringify(ed.st));
-    saveCustom();
-    editorEl.classList.add('hidden');
-    playStage(ed.idx);
   });
   mlBackBtn.addEventListener('click', () => { myLevelsEl.classList.add('hidden'); showMenu(); });
 
