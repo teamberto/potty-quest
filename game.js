@@ -62,6 +62,9 @@
   const edToolsEl = document.getElementById('ed-tools');
   const edDrawerEl = document.getElementById('ed-drawer');
   const edHintEl = document.getElementById('ed-hint');
+  const edHelpBtn = document.getElementById('ed-help');
+  const buildHowtoEl = document.getElementById('build-howto');
+  const buildHowtoStartBtn = document.getElementById('build-howto-start');
   const paywallEl = document.getElementById('paywall');
   const pwBuyBtn = document.getElementById('pw-buy');
   const pwRestoreBtn = document.getElementById('pw-restore');
@@ -622,6 +625,12 @@
   }
   function saveBest(b) {
     try { localStorage.setItem('pottychamp_best', JSON.stringify(b)); } catch (e) {}
+  }
+  function hasSeenBuildHowto() {
+    try { return localStorage.getItem('pottychamp_build_howto') === '1'; } catch (e) { return false; }
+  }
+  function markBuildHowtoSeen() {
+    try { localStorage.setItem('pottychamp_build_howto', '1'); } catch (e) {}
   }
   function hasSeenTutorial() {
     try { return localStorage.getItem('pottychamp_seen_tutorial') === '1'; } catch (e) { return false; }
@@ -1185,6 +1194,7 @@
     edNameEl.value = ed.st.name;
     setTool('room');            // opens ready to draw — the first thing a kid needs
     editorEl.classList.remove('hidden');
+    if (!hasSeenBuildHowto()) buildHowtoEl.classList.remove('hidden');
   }
 
   // ---- the dock drawer: only the active tool's controls, nothing else ----
@@ -1196,15 +1206,15 @@
   }
 
   function buildStuffDrawer() {
-    BUILD_PALETTE.forEach((g) => {
-      const row = document.createElement('div');
-      row.className = 'ed-row';
-      const title = document.createElement('div');
-      title.className = 'ed-row-title';
-      title.innerHTML = `<span>${g.icon || ''} ${g.tab}</span><span class="ed-row-swipe">swipe &#8250;</span>`;
-      row.appendChild(title);
-      const strip = document.createElement('div');
-      strip.className = 'ed-row-strip';
+    const strip = document.createElement('div');
+    strip.id = 'ed-strip';
+    BUILD_PALETTE.forEach((g, gi) => {
+      if (gi > 0) {
+        const div = document.createElement('div');
+        div.className = 'ed-divider';
+        div.textContent = g.tab;
+        strip.appendChild(div);
+      }
       for (const type of g.items) {
         const b = document.createElement('button');
         b.className = 'ed-item' + (ed.sel === type ? ' on' : '');
@@ -1214,25 +1224,18 @@
         b.addEventListener('click', () => {
           ed.sel = type;
           edHintEl.textContent = `Tap the map to put down a ${(BUILD_NAMES[type] || type).toLowerCase()}.`;
-          buildStuffDrawerMarks();
+          [...strip.querySelectorAll('.ed-item')].forEach((o) => o.classList.remove('on'));
+          b.classList.add('on');
         });
         strip.appendChild(b);
       }
-      row.appendChild(strip);
-      edDrawerEl.appendChild(row);
     });
-  }
-  // cheap re-highlight so tapping an item doesn't rebuild (and reset) the scroll
-  function buildStuffDrawerMarks() {
-    [...edDrawerEl.querySelectorAll('.ed-item')].forEach((b) => {
-      const n = b.querySelector('.ed-item-name');
-      b.classList.toggle('on', !!n && n.textContent === (BUILD_NAMES[ed.sel] || ed.sel));
-    });
+    edDrawerEl.appendChild(strip);
   }
 
   function buildFloorDrawer() {
-    const wrap = document.createElement('div');
-    wrap.id = 'ed-floors';
+    const strip = document.createElement('div');
+    strip.id = 'ed-strip';
     BUILD_FLOORS.forEach((f) => {
       const b = document.createElement('button');
       b.className = 'ed-floor' + (ed.floor === f.id ? ' on' : '');
@@ -1240,12 +1243,12 @@
       b.addEventListener('click', () => {
         ed.floor = f.id;
         edHintEl.textContent = `Tap a room to make it ${f.name.toLowerCase()}.`;
-        [...wrap.querySelectorAll('.ed-floor')].forEach((o) => o.classList.remove('on'));
+        [...strip.querySelectorAll('.ed-floor')].forEach((o) => o.classList.remove('on'));
         b.classList.add('on');
       });
-      wrap.appendChild(b);
+      strip.appendChild(b);
     });
-    edDrawerEl.appendChild(wrap);
+    edDrawerEl.appendChild(strip);
   }
 
   const TOOL_HINTS = {
@@ -1266,6 +1269,11 @@
     const b = e.target.closest('.ed-tool');
     if (b) setTool(b.dataset.tool);
   });
+  if (buildHowtoStartBtn) buildHowtoStartBtn.addEventListener('click', () => {
+    markBuildHowtoSeen();
+    buildHowtoEl.classList.add('hidden');
+  });
+  if (edHelpBtn) edHelpBtn.addEventListener('click', () => buildHowtoEl.classList.remove('hidden'));
 
   // Canvas taps -> tile coords (accounts for letterbox offset + scale)
   function tapToTile(clientX, clientY) {
@@ -2028,6 +2036,13 @@
   }
 
   function quitToMenu() {
+    // The unlock pitch after saving a stage uses this button too — from there,
+    // "Quit to Menu" just means "no thanks, back to my levels."
+    if (gameState === 'buildPitch') {
+      hideOverlay();
+      openMyLevels();
+      return;
+    }
     if (gameState !== 'paused' && gameState !== 'dashDemoOver') return;
     // Bank anything earned this run before leaving — quitting shouldn't
     // erase a new best distance, sticker, or daily challenge.

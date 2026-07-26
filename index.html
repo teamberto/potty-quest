@@ -171,26 +171,47 @@
     <div id="ed-top">
       <button id="ed-back" class="ed-btn">&#8592;</button>
       <input id="ed-name" maxlength="18" placeholder="Name your stage">
+      <button id="ed-help" class="ed-btn" aria-label="How to build">?</button>
       <button id="ed-save" class="ed-btn ed-save">Save</button>
+    </div>
+
+    <div id="ed-tools">
+      <button data-tool="room" class="ed-tool on">
+        <span class="ed-tool-icon">&#127968;</span><span class="ed-tool-name">Rooms</span>
+      </button>
+      <button data-tool="place" class="ed-tool">
+        <span class="ed-tool-icon">&#129681;</span><span class="ed-tool-name">Stuff</span>
+      </button>
+      <button data-tool="floor" class="ed-tool">
+        <span class="ed-tool-icon">&#129525;</span><span class="ed-tool-name">Floor</span>
+      </button>
+      <button data-tool="erase" class="ed-tool">
+        <span class="ed-tool-icon">&#129529;</span><span class="ed-tool-name">Erase</span>
+      </button>
     </div>
 
     <div id="ed-dock">
       <div id="ed-hint">Drag on the map to draw a room.</div>
       <div id="ed-drawer"></div>
-      <div id="ed-tools">
-        <button data-tool="room" class="ed-tool on">
-          <span class="ed-tool-icon">&#127968;</span><span class="ed-tool-name">Rooms</span>
-        </button>
-        <button data-tool="place" class="ed-tool">
-          <span class="ed-tool-icon">&#129681;</span><span class="ed-tool-name">Stuff</span>
-        </button>
-        <button data-tool="floor" class="ed-tool">
-          <span class="ed-tool-icon">&#129525;</span><span class="ed-tool-name">Floor</span>
-        </button>
-        <button data-tool="erase" class="ed-tool">
-          <span class="ed-tool-icon">&#129529;</span><span class="ed-tool-name">Erase</span>
-        </button>
+    </div>
+  </div>
+
+  <div id="build-howto" class="hidden">
+    <div class="dh-box">
+      <h1>&#128296; Let's Build!</h1>
+      <p class="dh-intro">Make your very own stage for Champ!</p>
+      <div id="bh-demo">
+        <div id="bh-room"></div>
+        <div id="bh-finger">&#9757;&#65039;</div>
       </div>
+      <p class="bh-step"><strong>1.</strong> Drag your finger on the floor &mdash; a room grows right where you drag!</p>
+      <div class="dh-grid">
+        <div class="htp-item"><span class="bh-icon">&#129681;</span><span><strong>Stuff</strong> &mdash; pick toys and furniture, then tap the floor to put them down.</span></div>
+        <div class="htp-item"><span class="bh-icon">&#129525;</span><span><strong>Floor</strong> &mdash; pick a floor, tap a room to change it.</span></div>
+        <div class="htp-item"><span class="bh-icon">&#129529;</span><span><strong>Erase</strong> &mdash; tap anything to take it away.</span></div>
+        <div class="htp-item"><img src="assets/potty.png"><span>The potty and the kids find their own spots &mdash; you just build!</span></div>
+      </div>
+      <button id="build-howto-start" class="cta-pulse">&#9654; Start Building!</button>
     </div>
   </div>
 
