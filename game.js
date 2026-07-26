@@ -91,7 +91,7 @@
     'floor_tile', 'floor_lino', 'floor_carpet', 'floor_lino_school',
     'decor_photo', 'decor_clock', 'decor_scribble', 'decor_chart', 'decor_window',
     'prop_bowl', 'prop_blocks', 'prop_cup', 'prop_socks', 'prop_slippers',
-    'fan', 'curtain', 'cat_0', 'cat_1',
+    'fan', 'curtain', 'dog_0', 'dog_1',
     'candy', 'tree', 'bench', 'porta_potty', 'shelf', 'cart', 'floor_store', 'desk', 'chalkboard',
   ];
   const images = {};
@@ -840,7 +840,7 @@
   // Turn a saved stage into a level object the existing engine understands.
   // Every room is player-drawn now, so every room can be deleted again.
   function allStageRooms(st) {
-    return st.rooms || [];
+    return (st && st.rooms) || [];
   }
 
   function stageToLevel(st) {
@@ -868,6 +868,7 @@
 
   // ---- validation: can Captain actually reach the potty and the kids? ----
   function validateStage(st) {
+    if (!st) return { ok: false, msg: 'Nothing to save yet!' };
     const lv = stageToLevel(st);
     const grid = [];
     for (let y = 0; y < GRID_ROWS; y++) {
@@ -1146,6 +1147,7 @@
   // Captain get the two open tiles that are furthest apart, so there's always a
   // real chase. Recomputed any time the rooms change.
   function autoPlaceMarkers(st) {
+    if (!st) return;
     const rooms = allStageRooms(st);
     if (!rooms.length) return;
     const lv = { rooms };
@@ -1313,6 +1315,7 @@
     buildDrawer();
   }
   edToolsEl.addEventListener('click', (e) => {
+    if (!ed.st) return;
     const b = e.target.closest('.ed-tool');
     if (b) setTool(b.dataset.tool);
   });
@@ -1332,7 +1335,7 @@
 
   // ---- room tool: press, drag, release ----
   function editorDragStart(clientX, clientY) {
-    if (ed.tool !== 'room') return false;
+    if (!ed.st || ed.tool !== 'room') return false;
     const t = tapToTile(clientX, clientY);
     if (t.x < 0 || t.y < 0 || t.x >= GRID_COLS || t.y >= GRID_ROWS) return false;
     ed.drag = { x0: t.x, y0: t.y, x1: t.x, y1: t.y };
@@ -1362,6 +1365,7 @@
   }
 
   function editorTap(clientX, clientY) {
+    if (!ed.st) return;
     const t = tapToTile(clientX, clientY);
     if (t.x < 0 || t.y < 0 || t.x >= GRID_COLS || t.y >= GRID_ROWS) return;
     const lv = stageToLevel(ed.st);
@@ -1415,6 +1419,7 @@
   }
 
   function drawEditor() {
+    if (!ed.st) return;
     const lv = stageToLevel(ed.st);
     drawTilemap(lv);
     drawLights(lv);
@@ -1506,8 +1511,12 @@
   let customIdx = 0;
 
   edBackBtn.addEventListener('click', () => { editorEl.classList.add('hidden'); openMyLevels(); });
-  edNameEl.addEventListener('input', () => { ed.st.name = edNameEl.value.slice(0, 18) || `Stage ${ed.idx + 1}`; });
+  edNameEl.addEventListener('input', () => {
+    if (!ed.st) return;
+    ed.st.name = edNameEl.value.slice(0, 18) || `Stage ${ed.idx + 1}`;
+  });
   edSaveBtn.addEventListener('click', () => {
+    if (!ed.st) return;
     const v = validateStage(ed.st);
     if (!v.ok) { showBanner(v.msg, '#ff7a8a'); return; }
     customLevels[ed.idx] = JSON.parse(JSON.stringify(ed.st));
@@ -3920,7 +3929,7 @@
     updateMop(dt);
     updateCleanup(dt);
     updateDuck(dt);
-    updateCat(dt);
+    updateDog(dt);
     if (pottyGlowTimer > 0) pottyGlowTimer -= dt;
     if (momLookupTimer > 0) momLookupTimer -= dt;
     updateParticles(dt);
@@ -4145,37 +4154,37 @@
     ctx.drawImage(images.icon_trophy, trophy.x - 8, trophy.y - 8 + bob, 16, 16);
   }
 
-  // ---------- The house cat: pads up and down the hallway ----------
-  const cat = { x: 6 * TILE, dir: 1, pauseT: 0, meowCool: 0 };
-  function updateCat(dt) {
+  // ---------- The house dog: pads up and down the hallway ----------
+  const dog = { x: 6 * TILE, dir: 1, pauseT: 0, barkCool: 0 };
+  function updateDog(dt) {
     if (worldNow().id !== 'home' || mayhemMode) return;
-    if (cat.meowCool > 0) cat.meowCool -= dt;
-    if (cat.pauseT > 0) { cat.pauseT -= dt; return; }
-    cat.x += cat.dir * 15 * dt;
-    if (cat.x > HOME_CAT.xMax * TILE) { cat.dir = -1; cat.pauseT = randRange(0.8, 2.2); }
-    if (cat.x < HOME_CAT.xMin * TILE) { cat.dir = 1; cat.pauseT = randRange(0.8, 2.2); }
-    // walk into the cat and it meows at you
+    if (dog.barkCool > 0) dog.barkCool -= dt;
+    if (dog.pauseT > 0) { dog.pauseT -= dt; return; }
+    dog.x += dog.dir * 15 * dt;
+    if (dog.x > HOME_DOG.xMax * TILE) { dog.dir = -1; dog.pauseT = randRange(0.8, 2.2); }
+    if (dog.x < HOME_DOG.xMin * TILE) { dog.dir = 1; dog.pauseT = randRange(0.8, 2.2); }
+    // walk into the dog and he barks at you
     const pc = centerOf(player);
-    if (cat.meowCool <= 0 && Math.hypot(pc.x - (cat.x + 12), pc.y - (HOME_CAT.y * TILE + 12)) < 22) {
-      cat.meowCool = 3;
+    if (dog.barkCool <= 0 && Math.hypot(pc.x - (dog.x + 12), pc.y - (HOME_DOG.y * TILE + 12)) < 22) {
+      dog.barkCool = 3;
       AudioFX.catch();
-      spawnFloatText(cat.x + 12, HOME_CAT.y * TILE - 6, 'MEOW!', '#d8d0e0');
+      spawnFloatText(dog.x + 12, HOME_DOG.y * TILE - 6, 'WOOF!', '#f0d8a8');
     }
   }
-  function drawCat() {
+  function drawDog() {
     if (worldNow().id !== 'home' || mayhemMode) return;
-    const moving = cat.pauseT <= 0;
+    const moving = dog.pauseT <= 0;
     const frame = moving ? Math.floor(performance.now() / 240) % 2 : 0;
-    const img = images[`cat_${frame}`];
+    const img = images[`dog_${frame}`];
     if (!img) return;
-    const y = HOME_CAT.y * TILE;
+    const y = HOME_DOG.y * TILE;
     ctx.save();
-    if (cat.dir < 0) { // flip so he faces the way he's walking
-      ctx.translate(cat.x + TILE, y);
+    if (dog.dir < 0) { // flip so he faces the way he's walking
+      ctx.translate(dog.x + TILE, y);
       ctx.scale(-1, 1);
       ctx.drawImage(img, 0, 0);
     } else {
-      ctx.drawImage(img, cat.x, y);
+      ctx.drawImage(img, dog.x, y);
     }
     ctx.restore();
   }
@@ -4247,7 +4256,7 @@
     drawTrophy();
     drawMopSpot();
     drawDuck();
-    drawCat();
+    drawDog();
 
     // depth-sorted furniture + characters
     const drawables = [];

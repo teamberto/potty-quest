@@ -46,9 +46,44 @@ class El {
   get firstChild(){ return this.children[0]||null; }
   remove(){}
 }
+
+// --- tiny HTML parser: builds the real element tree so static children
+// (tool buttons, seg buttons, etc.) exist just like in a browser ---
+const VOID=new Set(['img','input','br','hr','meta','link','source']);
+function parseHTML(html, registry){
+  const body=html.slice(html.indexOf('<body')+html.indexOf('>',html.indexOf('<body'))-html.indexOf('<body')+1);
+  const src=html.slice(html.indexOf('<body')).replace(/<script[\s\S]*?<\/script>/g,'');
+  const root=new El('body');
+  const stack=[root];
+  const re=/<\/?([a-zA-Z0-9]+)((?:\s+[^>]*?)?)\/?>/g;
+  let m;
+  while((m=re.exec(src))){
+    const [full,tag,attrs]=m;
+    const close=full[1]==='/';
+    const name=tag.toLowerCase();
+    if(name==='body') { if(close) break; continue; }
+    if(close){ if(stack.length>1) stack.pop(); continue; }
+    const el=new El(name);
+    const id=(attrs.match(/id="([^"]+)"/)||[])[1];
+    const cls=(attrs.match(/class="([^"]+)"/)||[])[1];
+    if(id){ el.id=id; registry[id]=el; }
+    if(cls) el.className=cls;
+    for(const a of attrs.matchAll(/data-([a-z-]+)="([^"]*)"/g)) el.dataset[a[1].replace(/-([a-z])/g,(x,c)=>c.toUpperCase())]=a[2];
+    const srcAttr=(attrs.match(/src="([^"]+)"/)||[])[1]; if(srcAttr) el._src=srcAttr;
+    stack[stack.length-1].appendChild(el);
+    if(!VOID.has(name) && !full.endsWith('/>')) stack.push(el);
+  }
+  return root;
+}
+
 const registry={};
-function mkDoc(ids){
-  ids.forEach(id=>{ const e=new El('div'); e.id=id; registry[id]=e; });
+function mkDoc(ids, initialClasses, html){
+  if(html) parseHTML(html, registry);
+  ids.forEach(id=>{ if(registry[id]) return;
+    const e=new El('div'); e.id=id;
+    const c=initialClasses&&initialClasses[id];
+    if(c) e.className=c;
+    registry[id]=e; });
   return {
     getElementById:(id)=>registry[id]||null,
     createElement:(t)=>new El(t),
@@ -58,4 +93,4 @@ function mkDoc(ids){
     visibilityState:'visible',
   };
 }
-module.exports={El,mkDoc,registry,mkCtx};
+module.exports={El,mkDoc,registry,mkCtx,parseHTML};

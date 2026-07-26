@@ -41,8 +41,8 @@ const HOME_LIGHTS = [
   { x: 11, y: 11, r: 64, warm: true },
   { x: 18, y: 11, r: 54, warm: true },
 ];
-// The cat patrols the hallway — pure ambience, no collision.
-const HOME_CAT = { y: 7.6, xMin: 3, xMax: 17 };
+// The dog patrols the hallway — pure ambience, no collision.
+const HOME_DOG = { y: 7.6, xMin: 3, xMax: 17 };
 
 // Furniture: blocking = collidable obstacle. Position is top-left tile.
 const FURNITURE_BASE = [
