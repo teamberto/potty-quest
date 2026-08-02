@@ -27,26 +27,67 @@
   <button id="btn-pause" aria-label="Pause">&#10074;&#10074;</button>
 
   <div id="menu" class="hidden">
-    <h1 id="menu-title">POTTY CHAMP</h1>
-    <div id="menu-chars">
-      <img src="assets/big_down_0.png" alt="Big brother">
-      <img src="assets/little_down_0.png" alt="Little brother">
-      <img src="assets/potty.png" alt="Potty">
+    <div id="menu-topbar">
+      <span id="menu-rank-chip">Rank 1</span>
+      <span class="menu-stat" id="menu-stat-stars">&#9733; 0</span>
+      <span class="menu-stat" id="menu-stat-stickers">&#128214; 0</span>
     </div>
-    <button id="menu-start">&#9654; Start Play</button>
-    <div id="menu-highscore">&nbsp;</div>
-    <button id="menu-intro">&#9654; Replay Intro</button>
-    <div id="menu-instructions">
-      <h2>How to Play</h2>
-      <p>Swipe anywhere to run (arrow keys or WASD on a computer). When an alert pops up over your little brother, touch him so he follows you, then lead him to the potty before the time runs out!</p>
-      <div class="instr"><img src="assets/icon_pee.png"><span>Pee alert &mdash; he needs to go, fast!</span></div>
-      <div class="instr"><img src="assets/icon_poop.png"><span>Poop alert &mdash; code brown, even faster!</span></div>
-      <div class="instr"><img src="assets/potty.png"><span>The potty &mdash; get him here in time to score.</span></div>
-      <div class="instr"><img src="assets/icon_star.png"><span>Stars &mdash; every save counts toward your high score.</span></div>
-      <div class="instr"><img src="assets/heart_full.png"><span>Hearts &mdash; you lose one for every accident.</span></div>
-      <div class="instr"><img src="assets/mop.png"><span>Mop &mdash; grab it from the bathroom, then stand on a mess to clean it up and win a heart back.</span></div>
-      <div class="instr"><img src="assets/turbo_shoe.png"><span>Turbo &mdash; hold the shoe button (or Shift) to sprint; grab glowing shoes to refill the power bar.</span></div>
-      <div class="instr"><span>&#9208;</span><span>Pause &mdash; tap the pause button (or press P) any time.</span></div>
+
+    <h1 id="menu-title">POTTY CHAMP</h1>
+
+    <div id="menu-card">
+      <div id="menu-chars">
+        <img src="assets/big_down_0.png" alt="Big brother">
+        <img src="assets/little_down_0.png" alt="Little brother">
+        <img src="assets/potty.png" alt="Potty">
+      </div>
+      <div id="menu-card-body">
+        <div id="menu-card-rank">Champ Rank 1</div>
+        <div id="menu-card-bar"><div id="menu-card-fill"></div></div>
+        <div id="menu-highscore">&nbsp;</div>
+      </div>
+    </div>
+
+    <button id="menu-start">&#9654; Story Mode</button>
+
+    <div id="menu-grid">
+      <button id="menu-levels" class="menu-tile"><span class="tile-name">Choose Level</span><span class="tile-sub">Pick any room</span></button>
+      <button id="menu-dash" class="menu-tile"><span class="tile-name">Potty Dash</span><span class="tile-sub">Run and run</span></button>
+      <button id="menu-mayhem" class="menu-tile"><span class="tile-name">Potty Mayhem</span><span class="tile-sub">Total chaos</span></button>
+      <button id="menu-build" class="menu-tile"><span class="tile-name">Level Builder</span><span class="tile-sub">Build your own</span></button>
+      <button id="menu-daily" class="menu-tile"><span class="tile-name">Daily Challenge</span><span class="tile-sub">New every day</span></button>
+      <button id="menu-stickers" class="menu-tile"><span class="tile-name">Sticker Book</span><span class="tile-sub">Your collection</span></button>
+    </div>
+
+    <button id="menu-gift">&#127873; Daily Surprise!</button>
+    <button id="menu-cap" class="hidden">&#129506; Cap Color</button>
+    <button id="menu-endless" class="hidden">&#9854; Endless Mode</button>
+    <button id="menu-unlock" class="hidden">&#128275; Unlock Everything &mdash; $3.99</button>
+
+    <div id="menu-footer">
+      <button id="menu-howtoplay">&#10067; How to Play</button>
+      <button id="menu-intro">&#9654; Replay Intro</button>
+    </div>
+  </div>
+
+  <div id="sticker-book" class="hidden">
+    <div id="sb-box">
+      <h1>Sticker Book</h1>
+      <p id="sb-count"></p>
+      <div id="sb-grid"></div>
+      <button id="sb-back">&#9664; Back to Menu</button>
+    </div>
+  </div>
+
+  <div id="sticker-toast"></div>
+
+  <div id="level-select" class="hidden">
+    <div id="ls-box">
+      <h1>Choose a Level</h1>
+      <div id="ls-worlds"></div>
+      <div id="ls-levels"></div>
+      <p id="ls-hint"></p>
+      <button id="ls-back">&#9664; Back to Menu</button>
     </div>
   </div>
 
@@ -54,14 +95,182 @@
     <h1 id="overlay-title">Potty Champ</h1>
     <p id="overlay-message">The ultimate potty-training rescue mission.</p>
     <button id="overlay-button">Tap to Begin</button>
+    <button id="overlay-quit" class="hidden">&#127968; Quit to Menu</button>
+  </div>
+
+  <div id="howtoplay" class="hidden">
+    <div id="htp-box">
+      <h1>How to Play</h1>
+      <div id="htp-steps">
+        <div class="htp-step">
+          <span class="htp-step-num">1</span>
+          <img class="htp-bob" src="assets/icon_pee.png" alt="">
+          <span class="htp-step-label">UH OH!</span>
+        </div>
+        <span class="htp-step-arrow">&#10140;</span>
+        <div class="htp-step">
+          <span class="htp-step-num">2</span>
+          <img src="assets/little_side_0.png" alt="">
+          <span class="htp-step-label">CATCH HIM!</span>
+        </div>
+        <span class="htp-step-arrow">&#10140;</span>
+        <div class="htp-step">
+          <span class="htp-step-num">3</span>
+          <img src="assets/potty.png" alt="">
+          <span class="htp-step-label">TO THE POTTY!</span>
+        </div>
+      </div>
+      <div id="htp-demo">
+        <div class="htp-control">
+          <div id="htp-joystick-base"><div id="htp-joystick-knob"></div></div>
+          <span class="htp-arrow">&#8599;</span>
+          <span class="htp-label">Drag to move</span>
+        </div>
+        <div class="htp-control">
+          <div id="htp-turbo-btn"><img src="assets/turbo_shoe.png" alt=""></div>
+          <span class="htp-arrow">&#8598;</span>
+          <span class="htp-label">Hold to sprint</span>
+        </div>
+      </div>
+      <div id="htp-grid">
+        <div class="htp-item"><img src="assets/icon_pee.png"><span>Pee alert &mdash; he needs to go, fast!</span></div>
+        <div class="htp-item"><img src="assets/icon_poop.png"><span>Poop alert &mdash; code brown, even faster!</span></div>
+        <div class="htp-item"><img src="assets/potty.png"><span>Rescue 7 pees &amp; 7 poops to finish the level.</span></div>
+        <div class="htp-item"><img src="assets/heart_full.png"><span>Hearts &mdash; 3 accidents and it's game over!</span></div>
+        <div class="htp-item"><img src="assets/mop.png"><span>Mop up messes to win a heart back.</span></div>
+        <div class="htp-item"><img src="assets/icon_star.png"><span>Stars &mdash; every save boosts your score.</span></div>
+      </div>
+      <button id="htp-start" class="cta-pulse">&#9654; Let's Go!</button>
+    </div>
+  </div>
+
+  <div id="bonus-howto" class="hidden">
+    <div class="bh-box">
+      <h1>Backyard Cleanup!</h1>
+      <p class="bh-intro">Bonus round! The yard is covered in toys. Grab them all and put them away in the toy chest for extra points.</p>
+      <div class="bh-grid">
+        <div class="htp-item"><img src="assets/toy_soccerball.png"><span>Walk over a toy to pick it up.</span></div>
+        <div class="htp-item"><img src="assets/toybox.png"><span>Carry it to the toy chest &mdash; touch any part of it to drop it in.</span></div>
+        <div class="htp-item"><img src="assets/icon_star.png"><span>Every toy you put away earns bonus points.</span></div>
+        <div class="htp-item"><img src="assets/turbo_shoe.png"><span>Hold sprint to move faster and grab more.</span></div>
+      </div>
+      <button id="bonus-howto-start" class="cta-pulse">&#9654; Start Cleanup!</button>
+    </div>
+  </div>
+
+  <div id="my-levels" class="hidden">
+    <div id="ml-box">
+      <h1>&#128296; My Levels</h1>
+      <p id="ml-sub">Draw your own rooms, fill them with stuff, then let Champ loose!</p>
+      <div id="ml-grid"></div>
+      <button id="ml-back">&#8592; Back</button>
+    </div>
+  </div>
+
+  <div id="editor" class="hidden">
+    <div id="ed-top">
+      <button id="ed-back" class="ed-btn">&#8592;</button>
+      <input id="ed-name" maxlength="18" placeholder="Name your stage">
+      <button id="ed-help" class="ed-btn" aria-label="How to build">?</button>
+      <button id="ed-save" class="ed-btn ed-save">Save</button>
+    </div>
+
+    <div id="ed-tools">
+      <button data-tool="room" class="ed-tool on">
+        <span class="ed-tool-icon">&#127968;</span><span class="ed-tool-name">Rooms</span>
+      </button>
+      <button data-tool="place" class="ed-tool">
+        <span class="ed-tool-icon">&#129681;</span><span class="ed-tool-name">Stuff</span>
+      </button>
+      <button data-tool="floor" class="ed-tool">
+        <span class="ed-tool-icon">&#129525;</span><span class="ed-tool-name">Floor</span>
+      </button>
+      <button data-tool="erase" class="ed-tool">
+        <span class="ed-tool-icon">&#129529;</span><span class="ed-tool-name">Erase</span>
+      </button>
+    </div>
+
+    <div id="ed-dock">
+      <div id="ed-hint">Drag on the map to draw a room.</div>
+      <div id="ed-drawer"></div>
+    </div>
+  </div>
+
+  <div id="build-howto" class="hidden">
+    <div class="dh-box">
+      <h1>&#128296; Let's Build!</h1>
+      <p class="dh-intro">Make your very own stage for Champ!</p>
+      <div id="bh-demo">
+        <div id="bh-room"></div>
+        <div id="bh-finger">&#9757;&#65039;</div>
+      </div>
+      <p class="bh-step"><strong>1.</strong> Drag your finger on the floor &mdash; a room grows right where you drag!</p>
+      <div class="dh-grid">
+        <div class="htp-item"><span class="bh-icon">&#129681;</span><span><strong>Stuff</strong> &mdash; pick toys and furniture, then tap the floor to put them down.</span></div>
+        <div class="htp-item"><span class="bh-icon">&#129525;</span><span><strong>Floor</strong> &mdash; pick a floor, tap a room to change it.</span></div>
+        <div class="htp-item"><span class="bh-icon">&#129529;</span><span><strong>Erase</strong> &mdash; tap anything to take it away.</span></div>
+        <div class="htp-item"><img src="assets/potty.png"><span>The potty and the kids find their own spots &mdash; you just build!</span></div>
+      </div>
+      <button id="build-howto-start" class="cta-pulse">&#9654; Start Building!</button>
+    </div>
+  </div>
+
+  <div id="dash-howto" class="hidden">
+    <div class="dh-box">
+      <h1>&#127939; Potty Dash</h1>
+      <p class="dh-intro">Run as far as you can &mdash; and <strong>don't step in anything!</strong></p>
+      <div class="dh-moves">
+        <div class="dh-move">
+          <span class="dh-gesture">&#11013;&#65039;&#10145;&#65039;</span>
+          <span class="dh-move-label">SWIPE<br>to switch lanes</span>
+        </div>
+        <div class="dh-move">
+          <span class="dh-gesture">&#11014;&#65039;</span>
+          <span class="dh-move-label">SWIPE UP<br>to JUMP</span>
+        </div>
+      </div>
+      <div class="dh-grid">
+        <div class="htp-item"><img src="assets/stain_poop.png"><span><strong>Jump over the poop!</strong> Swipe up or switch lanes.</span></div>
+        <div class="htp-item"><img src="assets/stain_pee.png"><span><strong>Jump over the pee!</strong> Puddles count too.</span></div>
+        <div class="htp-item"><img src="assets/turbo_shoe.png"><span><strong>Grab the &#9889; boots!</strong> They fill your turbo meter.</span></div>
+        <div class="htp-item dh-focus"><span class="dh-bolt">&#9889;</span><span><strong>Hold the &#9889; button for TURBO FOCUS</strong> &mdash; everything slows down so you can dodge easy. Uses up your meter!</span></div>
+        <div class="htp-item"><img src="assets/heart_full.png"><span>3 boo-boos and the run is over.</span></div>
+      </div>
+      <button id="dash-howto-start" class="cta-pulse">&#9654; Let's Dash!</button>
+    </div>
+  </div>
+
+  <div id="parent-gate" class="hidden">
+    <div id="pg-box">
+      <h1>Grown-Ups Only</h1>
+      <p>Hand the phone to a parent! Solve to continue:</p>
+      <p id="pg-question">7 &times; 6 = ?</p>
+      <div id="pg-answers"></div>
+      <button id="pg-cancel">&#10006; Cancel</button>
+    </div>
+  </div>
+
+  <div id="paywall" class="hidden">
+    <div id="pw-box">
+      <h1>Unlock Everything</h1>
+      <p class="pw-sub">Pay once. Keep it forever. No subscription, no ads.</p>
+      <div class="pw-list">
+        <div class="pw-item">&#127795; The Park &mdash; 5 wide-open levels</div>
+        <div class="pw-item">&#128722; Grocery Store &mdash; 5 aisle-maze levels</div>
+        <div class="pw-item">&#127979; School &mdash; TWIN trouble, 5 levels</div>
+        <div class="pw-item">&#127939; Full Potty Dash &mdash; run forever</div>
+        <div class="pw-item">&#128377; Potty Mayhem &mdash; 24-kid chaos</div>
+        <div class="pw-item">&#9854; Endless Mode + every sticker</div>
+      </div>
+      <button id="pw-buy">Unlock Everything &mdash; $3.99</button>
+      <button id="pw-restore">Restore Purchases</button>
+      <button id="pw-close">Not now</button>
+    </div>
   </div>
 
   <div id="controls">
-    <div class="dpad">
-      <button id="btn-up" class="ctrl-btn dpad-up" aria-label="Move up">&#8593;</button>
-      <button id="btn-left" class="ctrl-btn dpad-left" aria-label="Move left">&#8592;</button>
-      <button id="btn-right" class="ctrl-btn dpad-right" aria-label="Move right">&#8594;</button>
-      <button id="btn-down" class="ctrl-btn dpad-down" aria-label="Move down">&#8595;</button>
+    <div id="joystick-base" aria-label="Move">
+      <div id="joystick-knob"></div>
     </div>
   </div>
 

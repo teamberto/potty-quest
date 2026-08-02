@@ -6,14 +6,16 @@
   "scripts": {
     "build:www": "rm -rf www && mkdir -p www && cp index.html game.js levels.js style.css www/ && cp -r assets www/assets",
     "ios:sync": "npm run build:www && npx cap sync ios",
-    "ios:open": "npx cap open ios"
+    "ios:open": "npx cap open ios",
+    "test": "node test/my-levels.test.js && node test/crawl.test.js && node test/stress.test.js"
   },
   "dependencies": {
-    "@capacitor/core": "^6.1.2",
-    "@capacitor/ios": "^6.1.2"
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@revenuecat/purchases-capacitor": "^13.2.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.1.2",
+    "@capacitor/cli": "^8.0.0",
     "@capacitor/assets": "^3.0.5"
   }
 }
