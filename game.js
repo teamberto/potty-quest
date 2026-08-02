@@ -58,7 +58,7 @@
     const ch = window.innerHeight;
     canvas.style.width = cw + 'px';
     canvas.style.height = ch + 'px';
-    scale = Math.max(1, Math.min(cw / WORLD_W, ch / WORLD_H));
+    scale = Math.min(cw / WORLD_W, ch / WORLD_H);
     canvas.width = Math.round(cw * dpr);
     canvas.height = Math.round(ch * dpr);
     offsetX = (cw - WORLD_W * scale) / 2;
@@ -828,6 +828,7 @@
           AudioFX.clean();
           spawnBurst(sx, sy, PUFF_WHITE, 10, 50);
           updateHud();
+          break;                        // one mop cleans one stain
         }
       } else if (s.progress) {
         s.progress = Math.max(0, s.progress - dt * 2);
